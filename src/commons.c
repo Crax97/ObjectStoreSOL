@@ -2,32 +2,34 @@
 
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 
-int readn(int fd, char* buf, size_t buflen) {
-	if(buf != NULL) {
+#define CHUNK_SIZE 1024 
 
-		size_t left_bytes = buflen, total_bytes = 0;
-		while (left_bytes > 0) {
-			size_t read_bytes = 0;
-		    SC(read_bytes = read(fd, buf, left_bytes));
-			left_bytes -= read_bytes;
-			total_bytes += read_bytes;
-		}
-		return total_bytes;
+char* readn(int fd) {
+	char chonk[CHUNK_SIZE];
+	char* msg =(char*) malloc(sizeof(char));
+	msg[0] = '\0';
+
+	size_t total_read = 0, read_now = 0;
+	while((read_now = read(fd, chonk, CHUNK_SIZE)) > 0) {
+		total_read += read_now;
+		msg = (char*)realloc(msg, sizeof(char) * total_read + 1);
+		strcat(msg, chonk);
 	}
-	return 0;
+	return msg;
 }
 
-int writen (int fd, const char* buf, size_t len) {
-	if (buf != NULL) {
-		size_t left_bytes = len, total_bytes = 0;
-		while(left_bytes > 0) {
-			size_t read_bytes = 0;
-			SC(read_bytes = write(fd, buf, left_bytes));
-			left_bytes -= read_bytes;
-			total_bytes += read_bytes;
+int writen (int fd, const char* buf, size_t buflen) {
+	if(buf != NULL) {
+		size_t total_written = 0;
+		while(buflen > 0) {
+			size_t written_now = 0;
+			SC(written_now = write(fd, buf, buflen));
+			buflen -= written_now;
+			total_written += written_now;
 		}
-		return total_bytes;
+		return total_written;
 	}
 	return 0;
 }

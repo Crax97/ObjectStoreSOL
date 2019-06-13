@@ -30,19 +30,19 @@ int os_connect(char* name) {
 	char buf[MAX_LINE_LENGTH + 1];
 	sprintf(buf, REGISTER_STR, name);
 	size_t msglen = strlen(buf);
-	SC(write(client_sock, &msglen, sizeof(size_t)));
+
 	SC(writen(client_sock, buf, msglen));
 
-	SC(read(client_sock, &msglen, sizeof(size_t)));
-	SC(readn(client_sock, buf, msglen));
+	char* msg = NULL;
+	msg = readn(client_sock);
 
-	if(strcmp(buf, OK_STR) == 0) {
+	if(strcmp(msg, OK_STR) == 0) {
 		return OS_OK;	
 	} else {
-		const char* ko_msg = get_ko_msg(buf);
+		const char* ko_msg = get_ko_msg(msg);
 		fprintf(stderr, ERR_MSG_FORMAT, ko_msg);
 	}
-
+	free(msg);
 	return OS_ERR;
 }
 
@@ -56,17 +56,16 @@ int os_store(char* name, void* block, size_t len) {
 		sprintf(buf, STORE_STR, name, len);
 		size_t msglen = strlen(buf);
 
-		SC(write(client_sock, &msglen, sizeof(size_t)));	
 		SC(writen(client_sock, buf, msglen));
 
-		SC(read(client_sock, &msglen, sizeof(size_t)));
-		SC(readn(client_sock, buf, msglen));
+		char* msg = readn(client_sock);
 
-		if(strcmp(buf, OK_STR) != 0) {
-			const char* ko_msg = get_ko_msg (buf);
+		if(strcmp(msg, OK_STR) != 0) {
+			const char* ko_msg = get_ko_msg (msg);
 			fprintf(stderr, ERR_MSG_FORMAT, ko_msg); 
 			return OS_ERR;
 		}
+		free(msg);
 	}
 	return OS_OK;
 }
@@ -79,22 +78,23 @@ void* os_retrieve(char* name) {
 		char buf[MAX_LINE_LENGTH];
 		sprintf(buf, RETRIEVE_STR, name);
 		size_t msglen = strlen(buf);
-		SC(write(client_sock, &msglen, sizeof(size_t)));
 		SC(writen(client_sock, buf, msglen));
 		
-		//Message is split in two parts: result\n [data | KO msg \n]
-		SC(read(client_sock, &msglen, sizeof(size_t)));
-		SC(readn(client_sock, buf, msglen));
+		char* msg = readn(client_sock);
 
 		size_t datalen = 0;
-		if (sscanf(buf, DATA_STR, &datalen) > 0) {
-			char* data = (char*) malloc(sizeof(char) * datalen);	
-			SC(readn(client_sock, data, datalen));
-			return data;
+		char* data = NULL;
+		if (sscanf(msg, DATA_STR, &datalen, data) > 0) {
+			void* data_copy = malloc(sizeof(char*) * datalen);
+			memcpy(data_copy, data, datalen);
+			free(msg);	
+			return data_copy;
+
 		} else {
 			const char* ko_msg = get_ko_msg(buf);
 			fprintf(stderr, ERR_MSG_FORMAT, ko_msg);
 		}
+		free(msg);
 	}
 	return NULL;
 }
@@ -108,16 +108,16 @@ int os_delete(char* name) {
 		char buf[MAX_LINE_LENGTH + 1];
 		sprintf(buf, DELETE_STR, name);
 		size_t msglen = strlen(buf);
-		SC(write(client_sock, &msglen, sizeof(size_t)));
 		SC(writen(client_sock, buf, msglen));
-		
-		SC(read(client_sock, &msglen, sizeof(size_t)));
-		SC(readn(client_sock, buf, msglen));
-		if(strcmp(buf, OK_STR) == 0) {
+	
+		char* msg = readn(client_sock);
+		if(strcmp(msg, OK_STR) == 0) {
+			free(msg);
 			return OS_OK;
 		}	
 		const char* err_msg = get_ko_msg(buf);
 		fprintf(stderr, ERR_MSG_FORMAT, err_msg);
+		free(msg);
 	}
 
 	return OS_ERR;
@@ -129,14 +129,11 @@ int os_disconnect() {
 	}
 
 	const char* LEAVE_MSG = LEAVE_STR;
-	char buf[MAX_LINE_LENGTH + 1];
 	size_t msglen = strlen(LEAVE_MSG);
-	SC(write(client_sock, &msglen, sizeof(size_t)));
 	SC(writen(client_sock, LEAVE_MSG, msglen));
    
-	SC(read(client_sock, &msglen, sizeof(size_t)));	
-	SC(readn(client_sock, buf, msglen)); 
-
+	char* msg = readn(client_sock); 
+	free(msg);
 	return OS_OK;
 
 }
