@@ -1,21 +1,22 @@
 DIRECTORY=src
-CFLAGS = -peadantic -Wall -lpthread
+CFLAGS = -pedantic -Wall -lpthread
 CC = gcc
 .PHONY = clean
 
 all: server libobjstore testclient
 		
 server: 
-	$(CC) $(CFLAGS) $(DIRECTORY)/$@.c -o $(DIRECTORY)/$@.o
+	$(CC) $(CFLAGS) $(DIRECTORY)/$@.c -o $@.o
 
 testclient: libobjstore
-	$(CC) $(CFLAGS) $(DIRECTORY)/$@.c -lobjstore -o $(DIRECTORY)/$@.o
+	$(CC) $(CFLAGS) $(DIRECTORY)/$@.c -Llibs/ -lobjstore -o $@.o
 
 libobjstore: 
-	$(CC) -c $(CFLAGS) $(DIRECTORY)/$@.c -o $(DIRECTORY)/$@.o
+	$(CC) -c $(CFLAGS) $(DIRECTORY)/$@.c -o $@.o
+	-mkdir libs
 	ar rvs libs/$@.so $@.o
 
 clean:
-	-rm $(DIRECTORY)/*.o
-	-rm $(DIRECTORY)/libs/*.so
-	-rm -rf $(DIRECTORY)/libs
+	-rm *.o
+	-rm libs/*.so
+	-rm -rf libs
