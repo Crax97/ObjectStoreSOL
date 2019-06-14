@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/types.h>
@@ -27,14 +28,18 @@ int os_connect(char* name) {
 		return OS_ERR;
 	}	
 
+	if(fcntl(client_sock, F_SETFL, O_NONBLOCK) == -1) {
+		perror("Failed to set nonblocking IO on client socked");
+		return OS_ERR;
+	}
+
 	char buf[MAX_LINE_LENGTH + 1];
 	sprintf(buf, REGISTER_STR, name);
 	size_t msglen = strlen(buf);
 
 	SC(writen(client_sock, buf, msglen));
 
-	char* msg = NULL;
-	msg = readn(client_sock);
+	char* msg = read_to_newline(client_sock);
 
 	if(strcmp(msg, OK_STR) == 0) {
 		return OS_OK;	
@@ -59,7 +64,7 @@ int os_store(char* name, void* block, size_t len) {
 		SC(writen(client_sock, buf, msglen));
 		SC(writen(client_sock, (char*)block, len));
 
-		char* msg = readn(client_sock);
+		char* msg = read_to_newline(client_sock);
 
 		if(strcmp(msg, OK_STR) != 0) {
 			const char* ko_msg = get_ko_msg (msg);
@@ -82,21 +87,19 @@ void* os_retrieve(char* name) {
 		size_t msglen = strlen(buf);
 		SC(writen(client_sock, buf, msglen));
 		
-		char* msg = readn(client_sock);
+		char* msg = read_to_newline(client_sock);
 
 		size_t datalen = 0;
 		if (sscanf(msg, DATA_STR, &datalen) > 0) {
-			void* data = malloc(sizeof(char*) * datalen);
 			//TODO change to true readn
-			SC(read(client_sock, data, datalen));
-			return data;
+			data = read_data(client_sock, datalen);
 		} else {
 			const char* ko_msg = get_ko_msg(buf);
 			fprintf(stderr, ERR_MSG_FORMAT, ko_msg);
 		}
 		free(msg);
 	}
-	return data;
+	return (void*)data;
 }
 
 int os_delete(char* name) {
@@ -110,7 +113,7 @@ int os_delete(char* name) {
 		size_t msglen = strlen(buf);
 		SC(writen(client_sock, buf, msglen));
 	
-		char* msg = readn(client_sock);
+		char* msg = read_to_newline(client_sock);
 		if(strcmp(msg, OK_STR) == 0) {
 			free(msg);
 			return OS_OK;
@@ -130,7 +133,7 @@ int os_disconnect() {
 	const char* LEAVE_MSG = LEAVE_STR;
 	size_t msglen = strlen(LEAVE_MSG);
 	SC(writen(client_sock, LEAVE_MSG, msglen));
-	char* msg = readn(client_sock); 
+	char* msg = read_to_newline(client_sock); 
 	free(msg);
 	return OS_OK;
 

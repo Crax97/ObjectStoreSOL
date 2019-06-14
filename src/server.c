@@ -9,8 +9,10 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/stat.h>
+#include <sys/dir.h>
 #include <limits.h>
 #include <errno.h>
+#include <fcntl.h>
 
 #include "server.h"
 #include "commons.h"
@@ -49,7 +51,7 @@ void* thread_worker(void* args);
 void* signal_thread_worker(void* args);
 int send_ok(int fd);
 int send_ko(int fd, const char* msg);
-int handle_cmd(char* cmd, char* stuff, struct client_info_s *client);
+int handle_cmd(char* msg, struct client_info_s *client);
 
 // Server stuff
 int register_client(struct client_info_s *client);
@@ -76,12 +78,12 @@ int main(int argc, char** argv) {
 
 	mkdir("data", DEFAULT_MASK);
 
-	sigset_t signals;
-	sigemptyset(&signals);
-	pthread_sigmask(SIG_BLOCK, &signals, NULL);
-
 	pthread_t signal_thread;
 	pthread_create(&signal_thread, NULL, signal_thread_worker, NULL);
+
+	sigset_t signals;
+	sigemptyset(&signals);
+	pthread_sigmask(SIG_SETMASK, &signals, NULL);
 
 	while(1) {
 		int client_fd = 0;
@@ -96,6 +98,10 @@ int main(int argc, char** argv) {
 void create_worker_for_fd(struct server_info_s *info, int client_fd) {
 	struct client_info_s* client = (struct client_info_s*)  malloc(sizeof(struct client_info_s));
 	pthread_mutex_lock(&server_info_mutex);
+
+	if( fcntl(client_fd, F_SETFL, O_NONBLOCK) == -1) {
+		perror("Failed to enable non-blocking IO for file descriptor");
+	}
 
 	client->has_registered = 0;
 	client->is_connected = 1;
@@ -122,95 +128,128 @@ void* signal_thread_worker(void* args) {
 	sigpipe_handler.sa_flags = SA_RESTART;
 	sigaction(SIGPIPE, &sigpipe_handler, NULL);
 
+	struct sigaction sigusr1_handler = {0};
+	sigusr1_handler.sa_handler = sigusr_handler;
+	sigusr1_handler.sa_flags = SA_RESTART;
+	sigaction(SIGUSR1, &sigusr1_handler, NULL);
+
+	while(SERVER_RUNNING) {
+		int signal;
+		sigwait(&set, &signal);
+	   	printf("[ Object Store ] Received signal %d\n", signal);	
+	}
+
+	pthread_exit(NULL);
+}
+void sigusr_handler(int sig) {
+	server_print_info(&server);
+}
+
+void server_print_info(const struct server_info_s* info) {
+	size_t total_dim = 0;
+	DIR* data_dir = opendir("data");
+	if(data_dir == NULL) {
+		perror("Error opening data directory");
+		return;
+	}
+	struct dirent* next_dir = readdir(data_dir);
+	while(next_dir != NULL) {
+		if(	strcmp(next_dir->d_name, ".") == 0 ||
+			strcmp(next_dir->d_name, "..") == 0) {
+			continue;
+		}
+		
+		struct stat dirinfo;
+		char path[PATH_MAX + 1];
+		sprintf(path, "data/%s", next_dir->d_name);
+
+		if(stat(path, &dirinfo) == 0) {
+			total_dim += dirinfo.st_size;
+		}
+		
+		next_dir = readdir(data_dir);
+	}
+
+	printf("[Object Store] Clients connected: %lu\n", info->clients_connected);
+	printf("[Object Store] Total size: %lu\n", total_dim);	
 }
 
 void* thread_worker(void* args) {
 	struct client_info_s* my_info = (struct client_info_s*)args;
 	while(SERVER_RUNNING && my_info->is_connected) {
-		char* msg = readn(my_info->client_fd);
-		char* last = NULL;
-		char* cmd = strtok_r(msg, " ", &last);
-		char* reminder = strtok_r(NULL, "", &last);
+		char* msg = read_to_newline(my_info->client_fd);
 		errno = 0;
+		
 		if(msg != NULL) {
-			if (cmd != NULL && reminder != NULL) {
-				handle_cmd(cmd, reminder, my_info);
-			} else {
-				printf("[ Object Store ] Client %d sent garbage. Trying to send KO message\n", my_info->client_fd);
-				if(send_ko(my_info->client_fd, "Bad request") < 0) {
-					printf("[ Object Store ] Client %d probably closed the connection\n", my_info->client_fd);
-					remove_from_active_clients(my_info);
-					my_info->is_connected = 0;
-				}
-			}
-			free(msg);
-		} else {
-			printf("[OS] Connection closed");
-			remove_from_active_clients(my_info);
+			printf("[Object Store] Got %s", msg); 
+			handle_cmd(msg, my_info);
 		}
+
 	}	
 	pthread_exit(NULL);
 }
 
-int handle_cmd(char* cmd, char* rest, struct client_info_s* client) {
+int handle_cmd(char* msg, struct client_info_s* client) {
+	char* last = NULL;
+	char* cmd = strtok_r(msg, " ", &last);
 	int result = 0;
-	printf("[ Object Store ] Parsing cmd %s, %s\n", cmd, rest);
-	if (strcmp(cmd, "REGISTER") == 0) {
-		if(!client->has_registered) {
-			sscanf(rest, "%s \n", client->client_name); 
-			if(strlen(client->client_name)== 0) { 
-				return send_ko(client->client_fd, "REGISTER: No name provided");;
-			}
-
-			register_client(client);
-			return send_ok(client->client_fd);
-		} else {
-			return send_ko(client->client_fd, "Client has already registered on the server!");
-		}
-	} else if(client->has_registered) {
-		if (strcmp(cmd, "STORE") == 0) {
-			char* last = NULL;
-			size_t data_len = 0;
-			char* name = strtok_r(rest, " ", &last);
-			char* len_str = strtok_r(NULL, " ", &last);
-			data_len = strtoul(len_str, NULL, 0);
-			if (name == NULL || len_str == NULL || data_len == 0) {
-				 return send_ko(client->client_fd, "STORE: Invalid arguments");
-			}	
-			char* data = (char*) malloc(sizeof(char) * data_len);
-			if( read(client->client_fd, data, data_len) < 0) {
-				free(data);
-				return -1;
-			}
-			
-			store_data(client, name, data_len, data);
-			free(data);
-			result = send_ok(client->client_fd);
-		} else if(strcmp(cmd, "RETRIEVE") == 0) {
-			char* name = strtok(rest, " \n");
-			if (name == NULL) {
-				return -1;
-			}
-			if (retrieve_data(client, name) != 0) {
-				result = send_ko(client->client_fd, "Client doesn't have that object");
-			}
-		} else if(strcmp(cmd, "DELETE") == 0) {
-			char* name = strtok(rest, " \n");
-			if(name == NULL) {
-				return -1;
-			}
-			if(delete_data(client, name) != 0) {
-				result = send_ko(client->client_fd, "Client doesn't have that object");
+	if(cmd != NULL) {
+		if (strcmp(cmd, "REGISTER") == 0) {
+			if(!client->has_registered) {
+				char* name = strtok_r(NULL, " \n", &last);
+				strcpy(client->client_name, name);
+				if(strlen(client->client_name)== 0) { 
+					return send_ko(client->client_fd, "REGISTER: No name provided");;
+				}
+	
+				register_client(client);
+				return send_ok(client->client_fd);
 			} else {
-				result = send_ok(client->client_fd);
+				return send_ko(client->client_fd, "Client has already registered on the server!");
 			}
-		} else if(strcmp(cmd, "LEAVE") == 0) {
-			result = disconnect_client(client);
+		} else if(client->has_registered) {
+			if (strcmp(cmd, "STORE") == 0) {
+				char* data_name = strtok_r(NULL, " ", &last);
+				char* len_str = strtok_r(NULL, " ", &last);
+				size_t data_len = data_len = strtoul(len_str, NULL, 0);	
+				
+				if (data_name == NULL || len_str == NULL || data_len == 0) {
+					 return send_ko(client->client_fd, "STORE: Invalid arguments");
+				}	
+
+				char* data = read_data(client->client_fd, data_len);
+				if(data == NULL) {
+					return send_ko(client->client_fd, "STORE: No data sent");
+				}
+				store_data(client, data_name, data_len, data);
+				free(data);
+				result = send_ok(client->client_fd);
+			} else if(strcmp(cmd, "RETRIEVE") == 0) {
+				char* data_name = strtok_r(NULL, " \n", &last);
+				if (data_name == NULL) {
+					return -1;
+				}
+				if (retrieve_data(client, data_name) != 0) {
+					result = send_ko(client->client_fd, "Client doesn't have that object");
+				}
+			} else if(strcmp(cmd, "DELETE") == 0) {
+				char* data_name = strtok_r(NULL, " \n", &last);
+				if(data_name == NULL) {
+					return -1;
+				}
+				if(delete_data(client, data_name) != 0) {
+					result = send_ko(client->client_fd, "Client doesn't have that object");
+				} else {
+					result = send_ok(client->client_fd);
+				}
+			} else if(strcmp(cmd, "LEAVE") == 0) {
+				result = disconnect_client(client);
+			} else {
+				result = send_ko(client->client_fd, "Unrecognised command!");
+			}
 		} else {
-			result = send_ko(client->client_fd, "Unrecognised command!");
+			result = send_ko(client->client_fd, "Client hasn't registered");
 		}
-	} else {
-		result = send_ko(client->client_fd, "Client hasn't registered");
 	}
 	return result;
 }
@@ -269,7 +308,7 @@ int retrieve_data(struct client_info_s *client, char* data_name) {
 		}	
 		read_data[read_bytes] = '\0';
 		char msg[MAX_LINE_LENGTH];	
-		sprintf(msg, "DATA %lu \n", read_bytes);
+		sprintf(msg, "DATA %lu \n ", read_bytes);
 
 		if (writen(client->client_fd, msg, strlen(msg)) < 0) {
 			return -1;

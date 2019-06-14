@@ -10,7 +10,7 @@
 #define OS_NEXISTS 4
 
 #define REGISTER_STR "REGISTER %s \n"
-#define STORE_STR "STORE %s %lu \n"
+#define STORE_STR "STORE %s %lu \n "
 #define OK_STR "OK \n"
 #define RETRIEVE_STR "RETRIEVE %s \n"
 #define DATA_STR "DATA %lu \n"

@@ -10,7 +10,8 @@
 
 #define MAX_LINE_LENGTH 1024
 
-char* readn(int fd);
+char* read_to_newline(int fd);
+char* read_data(int fd, size_t len);
 int writen(int fd, const char* buf, size_t len);
 
 #endif
