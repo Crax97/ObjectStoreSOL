@@ -57,6 +57,7 @@ int os_store(char* name, void* block, size_t len) {
 		size_t msglen = strlen(buf);
 
 		SC(writen(client_sock, buf, msglen));
+		SC(writen(client_sock, (char*)block, len));
 
 		char* msg = readn(client_sock);
 

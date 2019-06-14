@@ -16,7 +16,9 @@
 
 #define MAX_CLIENT_NAME_LEN 100
 #define BUF_SIZE 1024
-#define OK_STR "OK \n "
+#define OK_STR "OK \n"
+
+#define DEFAULT_MASK 0777
 
 struct client_info_s {
 	struct client_info_s* prec;
@@ -53,6 +55,10 @@ int delete_data(struct client_info_s *client, char* data_name);
 int disconnect_client(struct client_info_s *client);
 
 int main(int argc, char** argv) {
+	//TBR
+	unlink(SOCKNAME);
+
+
 	int socket_fd = 0;
 	struct sockaddr_un sock;	
 	sock.sun_family = AF_UNIX;
@@ -64,6 +70,8 @@ int main(int argc, char** argv) {
 	server.clients = NULL;
 	server.clients_head = NULL;
 	server.clients_connected = 0;
+
+	mkdir("data", DEFAULT_MASK);
 
 	while(1) {
 		int client_fd = 0;
@@ -84,12 +92,12 @@ void create_worker_for_fd(struct server_info_s *info, int client_fd) {
 	client->client_fd = client_fd;
 	client->next = NULL;
 	client->prec = info->clients_head;
-	info->clients_head->next = client;	
+	info->clients_head = client;	
 
 	pthread_mutex_unlock(&server_info_mutex);
 
 	pthread_t worker_thread;
-	SC(pthread_create(&worker_thread, NULL, thread_worker, &client)); 
+	SC(pthread_create(&worker_thread, NULL, thread_worker, client)); 
 	client->client_thread = worker_thread;
 	printf("[ Object Store ] Got a new Client: %d\n", client_fd);
 }
@@ -126,14 +134,15 @@ void handle_cmd(char* cmd, char* rest, struct client_info_s* client) {
 		}
 	} else if(client->has_registered) {
 		if (strcmp(cmd, "STORE") == 0) {
-			char** last = NULL;
+			char* last = NULL;
 			size_t data_len = 0;
-			char* name = strtok_r(rest, " ", last);
-			char* len_str = strtok_r(NULL, " ", last);
-			strtok_r(NULL, "\n", last);
-			char* data = (*last) + 1;	
+			char* name = strtok_r(rest, " ", &last);
+			char* len_str = strtok_r(NULL, " ", &last);
 			data_len = strtoul(len_str, NULL, 0);
-			
+		
+			char* data = (char*) malloc(sizeof(char) * data_len);
+			SC(read(client->client_fd, data, data_len));
+
 			store_data(client, name, data_len, data);
 		} else if(strcmp(cmd, "RETRIEVE")) {
 			char* name = strtok(rest, "\n");
@@ -164,7 +173,7 @@ void register_client(struct client_info_s *client) {
 	sprintf(path, "%s/%s", "data", client->client_name);
 	struct stat dir;
 	if(stat(path, &dir) != 0) {
-		mkdir(path, 700);
+		mkdir(path, DEFAULT_MASK);
 	}
 
 	client->has_registered = 1;
@@ -176,7 +185,8 @@ int store_data(struct client_info_s *client, char* data_name, size_t data_len, c
 	sprintf(path, "%s/%s/%s", "data", client->client_name, data_name);
 	
 	FILE* file = fopen(path, "w");
-	if(file != NULL) {
+	if(file == NULL) {
+		perror("Error opening file");
 		return -1;
 	}
 
@@ -241,6 +251,7 @@ void send_ko(int fd, const char* msg) {
 }
 
 void send_ok(int fd) {
-	writen(fd, OK_STR, strlen(OK_STR));
+	char msg[] = OK_STR;
+	writen(fd, OK_STR, strlen(msg));
 }
 

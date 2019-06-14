@@ -1,5 +1,5 @@
 DIRECTORY=src
-CFLAGS += -pedantic -Wall -lpthread
+CFLAGS += -g -pedantic -Wall -lpthread
 CC = gcc
 .PHONY = clean
 
@@ -8,8 +8,8 @@ all: server libobjstore testclient
 server: commons
 	$(CC) $(CFLAGS) $(DIRECTORY)/$@.c $<.o -o $@.o
 
-testclient: libobjstore
-	$(CC) $(CFLAGS) $(DIRECTORY)/$@.c -Llibs/ -lobjstore -o $@.o
+testclient: libobjstore commons
+	$(CC) $(CFLAGS) $(DIRECTORY)/$@.c commons.o -Llibs/ -lobjstore -o $@.o
 
 libobjstore: commons 
 	$(CC) -c $(CFLAGS) $(DIRECTORY)/$@.c $<.o -o $@.o
