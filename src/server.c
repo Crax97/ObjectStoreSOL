@@ -63,11 +63,11 @@ int disconnect_client(struct client_info_s *client);
 int main(int argc, char** argv) {
 	//TBR
 	unlink(SOCKNAME);
-
-	int socket_fd = 0;
 	struct sockaddr_un sock;	
 	sock.sun_family = AF_UNIX;
 	strcpy(sock.sun_path, SOCKNAME);			
+
+	int socket_fd = 0;
 	SC(socket_fd = socket(AF_UNIX, SOCK_STREAM, 0));
 	SC(bind(socket_fd, (struct sockaddr*)&sock, sizeof(sock)));
 	SC(listen(socket_fd, BACKLOG));
@@ -78,12 +78,12 @@ int main(int argc, char** argv) {
 
 	mkdir("data", DEFAULT_MASK);
 
-	pthread_t signal_thread;
-	pthread_create(&signal_thread, NULL, signal_thread_worker, NULL);
-
 	sigset_t signals;
 	sigemptyset(&signals);
 	pthread_sigmask(SIG_SETMASK, &signals, NULL);
+
+	pthread_t signal_thread;
+	SC(pthread_create(&signal_thread, NULL, signal_thread_worker, NULL));
 
 	while(1) {
 		int client_fd = 0;
@@ -145,33 +145,54 @@ void sigusr_handler(int sig) {
 	server_print_info(&server);
 }
 
+void gather_directory_elts_and_size(DIR* dir, size_t* elts, size_t* size) {
+	char buf[PATH_MAX];
+	getcwd(buf, PATH_MAX);
+	printf("scanning dir %s\n", buf); 
+	struct dirent* cur_dir = readdir(dir);
+	while(cur_dir != NULL) {
+		if( strcmp(cur_dir->d_name, ".") == 0 ||
+			strcmp(cur_dir->d_name, "..") == 0) {
+		} else {
+			if(cur_dir->d_type == DT_DIR) {
+				DIR* newdir = opendir(cur_dir->d_name);
+				SC(chdir(cur_dir->d_name));	
+				if(newdir != NULL) {
+					gather_directory_elts_and_size(newdir, elts, size);	
+					closedir(newdir);
+				}
+			} else {
+				struct stat info;
+				if(stat(cur_dir->d_name, &info) == 0) {
+
+					(*elts) += 1;
+					(*size) += info.st_size;	
+				} else {
+					perror("Stat failure");
+				}
+			}
+		}
+		cur_dir = readdir(dir);
+	}
+	SC(chdir(".."));
+
+}	
+
 void server_print_info(const struct server_info_s* info) {
-	size_t total_dim = 0;
+	printf("[Object Store] Server infos:\n");
+	size_t total_dim = 0, total_count = 0;
 	DIR* data_dir = opendir("data");
-	if(data_dir == NULL) {
-		perror("Error opening data directory");
-		return;
+	if(data_dir != NULL) {
+		chdir("data");
+		gather_directory_elts_and_size(data_dir, &total_count, &total_dim);
+		closedir(data_dir);
+		printf("[Object Store] Clients connected: %lu\n", info->clients_connected);
+		printf("[Object Store] Total size: %lu\n", total_dim);
+		printf("[Object Store] Total elements: %lu\n", total_count);	
+	} else {
+		fprintf(stderr, "[Object Store] could not open the data directory!");
+		exit(EXIT_FAILURE);
 	}
-	struct dirent* next_dir = readdir(data_dir);
-	while(next_dir != NULL) {
-		if(	strcmp(next_dir->d_name, ".") == 0 ||
-			strcmp(next_dir->d_name, "..") == 0) {
-			continue;
-		}
-		
-		struct stat dirinfo;
-		char path[PATH_MAX + 1];
-		sprintf(path, "data/%s", next_dir->d_name);
-
-		if(stat(path, &dirinfo) == 0) {
-			total_dim += dirinfo.st_size;
-		}
-		
-		next_dir = readdir(data_dir);
-	}
-
-	printf("[Object Store] Clients connected: %lu\n", info->clients_connected);
-	printf("[Object Store] Total size: %lu\n", total_dim);	
 }
 
 void* thread_worker(void* args) {
