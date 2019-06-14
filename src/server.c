@@ -10,6 +10,7 @@
 #include <sys/un.h>
 #include <sys/stat.h>
 #include <limits.h>
+#include <errno.h>
 
 #include "server.h"
 #include "commons.h"
@@ -41,14 +42,17 @@ pthread_mutex_t server_info_mutex = PTHREAD_MUTEX_INITIALIZER;
 struct server_info_s server;
 int SERVER_RUNNING = 1;
 
+void remove_from_active_clients(struct client_info_s* client);
+void sigusr_handler(int sig);
+
 void* thread_worker(void* args);
-void* signal_thread(void* args);
-void send_ok(int fd);
-void send_ko(int fd, const char* msg);
-void handle_cmd(char* cmd, char* stuff, struct client_info_s *client);
+void* signal_thread_worker(void* args);
+int send_ok(int fd);
+int send_ko(int fd, const char* msg);
+int handle_cmd(char* cmd, char* stuff, struct client_info_s *client);
 
 // Server stuff
-void register_client(struct client_info_s *client);
+int register_client(struct client_info_s *client);
 int store_data(struct client_info_s *client, char* data_name, size_t data_len, char* data);
 int retrieve_data(struct client_info_s *client, char* data_name);
 int delete_data(struct client_info_s *client, char* data_name);
@@ -57,7 +61,6 @@ int disconnect_client(struct client_info_s *client);
 int main(int argc, char** argv) {
 	//TBR
 	unlink(SOCKNAME);
-
 
 	int socket_fd = 0;
 	struct sockaddr_un sock;	
@@ -72,6 +75,13 @@ int main(int argc, char** argv) {
 	server.clients_connected = 0;
 
 	mkdir("data", DEFAULT_MASK);
+
+	sigset_t signals;
+	sigemptyset(&signals);
+	pthread_sigmask(SIG_BLOCK, &signals, NULL);
+
+	pthread_t signal_thread;
+	pthread_create(&signal_thread, NULL, signal_thread_worker, NULL);
 
 	while(1) {
 		int client_fd = 0;
@@ -102,35 +112,60 @@ void create_worker_for_fd(struct server_info_s *info, int client_fd) {
 	printf("[ Object Store ] Got a new Client: %d\n", client_fd);
 }
 
-void* signal_thread(void* args) {
+void* signal_thread_worker(void* args) {
 	sigset_t set;
 	sigfillset(&set);
 	pthread_sigmask(SIG_SETMASK, &set, NULL);	
+
+	struct sigaction sigpipe_handler = {0};
+	sigpipe_handler.sa_handler = SIG_IGN;
+	sigpipe_handler.sa_flags = SA_RESTART;
+	sigaction(SIGPIPE, &sigpipe_handler, NULL);
+
 }
 
 void* thread_worker(void* args) {
 	struct client_info_s* my_info = (struct client_info_s*)args;
 	while(SERVER_RUNNING && my_info->is_connected) {
 		char* msg = readn(my_info->client_fd);
-		char* cmd = strtok(msg, " ");
-		char* reminder = cmd + strlen(cmd) + 1;
-		handle_cmd(cmd, reminder, my_info);
-
-		free(msg);
+		char* last = NULL;
+		char* cmd = strtok_r(msg, " ", &last);
+		char* reminder = strtok_r(NULL, "", &last);
+		errno = 0;
+		if(msg != NULL) {
+			if (cmd != NULL && reminder != NULL) {
+				handle_cmd(cmd, reminder, my_info);
+			} else {
+				printf("[ Object Store ] Client %d sent garbage. Trying to send KO message\n", my_info->client_fd);
+				if(send_ko(my_info->client_fd, "Bad request") < 0) {
+					printf("[ Object Store ] Client %d probably closed the connection\n", my_info->client_fd);
+					remove_from_active_clients(my_info);
+					my_info->is_connected = 0;
+				}
+			}
+			free(msg);
+		} else {
+			printf("[OS] Connection closed");
+			remove_from_active_clients(my_info);
+		}
 	}	
 	pthread_exit(NULL);
 }
 
-void handle_cmd(char* cmd, char* rest, struct client_info_s* client) {
-
-	printf("[ Object Store ] Parsing cmd %s, %s", cmd, rest);
+int handle_cmd(char* cmd, char* rest, struct client_info_s* client) {
+	int result = 0;
+	printf("[ Object Store ] Parsing cmd %s, %s\n", cmd, rest);
 	if (strcmp(cmd, "REGISTER") == 0) {
 		if(!client->has_registered) {
 			sscanf(rest, "%s \n", client->client_name); 
+			if(strlen(client->client_name)== 0) { 
+				return send_ko(client->client_fd, "REGISTER: No name provided");;
+			}
+
 			register_client(client);
-			send_ok(client->client_fd);
+			return send_ok(client->client_fd);
 		} else {
-			send_ko(client->client_fd, "Client has already registered on the server!");
+			return send_ko(client->client_fd, "Client has already registered on the server!");
 		}
 	} else if(client->has_registered) {
 		if (strcmp(cmd, "STORE") == 0) {
@@ -139,36 +174,48 @@ void handle_cmd(char* cmd, char* rest, struct client_info_s* client) {
 			char* name = strtok_r(rest, " ", &last);
 			char* len_str = strtok_r(NULL, " ", &last);
 			data_len = strtoul(len_str, NULL, 0);
-		
+			if (name == NULL || len_str == NULL || data_len == 0) {
+				 return send_ko(client->client_fd, "STORE: Invalid arguments");
+			}	
 			char* data = (char*) malloc(sizeof(char) * data_len);
-			SC(read(client->client_fd, data, data_len));
-
+			if( read(client->client_fd, data, data_len) < 0) {
+				free(data);
+				return -1;
+			}
+			
 			store_data(client, name, data_len, data);
-			send_ok(client->client_fd);
+			free(data);
+			result = send_ok(client->client_fd);
 		} else if(strcmp(cmd, "RETRIEVE") == 0) {
 			char* name = strtok(rest, " \n");
+			if (name == NULL) {
+				return -1;
+			}
 			if (retrieve_data(client, name) != 0) {
-				send_ko(client->client_fd, "Client doesn't have that object");
+				result = send_ko(client->client_fd, "Client doesn't have that object");
 			}
 		} else if(strcmp(cmd, "DELETE") == 0) {
 			char* name = strtok(rest, " \n");
+			if(name == NULL) {
+				return -1;
+			}
 			if(delete_data(client, name) != 0) {
-				send_ko(client->client_fd, "Client doesn't have that object");
+				result = send_ko(client->client_fd, "Client doesn't have that object");
 			} else {
-				send_ok(client->client_fd);
+				result = send_ok(client->client_fd);
 			}
 		} else if(strcmp(cmd, "LEAVE") == 0) {
-			disconnect_client(client);
+			result = disconnect_client(client);
 		} else {
-			send_ko(client->client_fd, "Unrecognised command!");
+			result = send_ko(client->client_fd, "Unrecognised command!");
 		}
 	} else {
-		send_ko(client->client_fd, "Client hasn't registered");
+		result = send_ko(client->client_fd, "Client hasn't registered");
 	}
-
+	return result;
 }
 
-void register_client(struct client_info_s *client) {
+int register_client(struct client_info_s *client) {
 	char path[PATH_MAX];
 	sprintf(path, "%s/%s", "data", client->client_name);
 	struct stat dir;
@@ -224,8 +271,12 @@ int retrieve_data(struct client_info_s *client, char* data_name) {
 		char msg[MAX_LINE_LENGTH];	
 		sprintf(msg, "DATA %lu \n", read_bytes);
 
-		SC(writen(client->client_fd, msg, strlen(msg)));
-		SC(writen(client->client_fd, read_data, read_bytes));
+		if (writen(client->client_fd, msg, strlen(msg)) < 0) {
+			return -1;
+		}
+		if (writen(client->client_fd, read_data, read_bytes) < 0) {
+			return -1;
+		}
 		return 0;
 	} else {
 		perror("[ Object Store ] RETRIEVE could not open the file");
@@ -233,7 +284,8 @@ int retrieve_data(struct client_info_s *client, char* data_name) {
 	return -1;
 }
 
-int disconnect_client(struct client_info_s *client) {
+void remove_from_active_clients(struct client_info_s* client) {
+	pthread_mutex_lock(&server_info_mutex);
 	if(client->prec != NULL) {
 		client->prec->next = client->next;
 	}
@@ -241,20 +293,34 @@ int disconnect_client(struct client_info_s *client) {
 		client->next->prec = client->prec;
 	}
 
-	client->is_connected = 0;
-	send_ok(client->client_fd);
-	close(client->client_fd);
-	return 0;
+	if (server.clients_head == client) {
+		server.clients_head = client->prec;
+	}
+
+	if(server.clients == client) {
+		server.clients = client->next;
+	}
+
+	server.clients_connected --;
+	pthread_mutex_unlock(&server_info_mutex);
 }
 
-void send_ko(int fd, const char* msg) {
+int disconnect_client(struct client_info_s *client) {
+	remove_from_active_clients(client);
+	client->is_connected = 0;
+	int result = send_ok(client->client_fd);
+	close(client->client_fd);
+	return result;
+}
+
+int send_ko(int fd, const char* msg) {
 	char buf[BUF_SIZE];
 	sprintf(buf, "KO %s \n", msg);
-	writen(fd, buf, strlen(buf));
+	return writen(fd, buf, strlen(buf));
 }
 
-void send_ok(int fd) {
+int send_ok(int fd) {
 	char msg[] = OK_STR;
-	writen(fd, OK_STR, strlen(msg));
+	return writen(fd, OK_STR, strlen(msg));
 }
 

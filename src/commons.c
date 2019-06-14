@@ -28,6 +28,10 @@ char* readn(int fd) {
 		if(c == '\n') {
 			break;
 		}
+		if(c == '\0') {
+			free(msg);
+			return NULL;
+		}
 	}
 	return msg;
 }
@@ -37,7 +41,9 @@ int writen (int fd, const char* buf, size_t buflen) {
 		size_t total_written = 0;
 		while(total_written < buflen) {
 			size_t written_now = 0;
-			SC(written_now = write(fd, buf, buflen));
+			if ((written_now = write(fd, buf, buflen)) < 0) {
+					return written_now;
+			}
 			total_written += written_now;
 		}
 		return total_written;
