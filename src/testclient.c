@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
 		EXITTHESHIP("Retrieve failed");
 	}
 
-	if(os_delete(name) != OS_OK) {
+	if(os_delete(store_name) != OS_OK) {
 		EXITTHESHIP("Delete failed");
 	}
 	if(os_disconnect() != OS_OK) {

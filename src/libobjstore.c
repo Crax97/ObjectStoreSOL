@@ -72,6 +72,7 @@ int os_store(char* name, void* block, size_t len) {
 }
 
 void* os_retrieve(char* name) {
+	char* data = NULL;
 	if (client_sock <= 0) {
 		return NULL;
 	}
@@ -84,20 +85,18 @@ void* os_retrieve(char* name) {
 		char* msg = readn(client_sock);
 
 		size_t datalen = 0;
-		char* data = NULL;
-		if (sscanf(msg, DATA_STR, &datalen, data) > 0) {
-			void* data_copy = malloc(sizeof(char*) * datalen);
-			memcpy(data_copy, data, datalen);
-			free(msg);	
-			return data_copy;
-
+		if (sscanf(msg, DATA_STR, &datalen) > 0) {
+			void* data = malloc(sizeof(char*) * datalen);
+			//TODO change to true readn
+			SC(read(client_sock, data, datalen));
+			return data;
 		} else {
 			const char* ko_msg = get_ko_msg(buf);
 			fprintf(stderr, ERR_MSG_FORMAT, ko_msg);
 		}
 		free(msg);
 	}
-	return NULL;
+	return data;
 }
 
 int os_delete(char* name) {
@@ -128,11 +127,9 @@ int os_disconnect() {
 	if(client_sock <= 0) {
 		return OS_NOCONN;
 	}
-
 	const char* LEAVE_MSG = LEAVE_STR;
 	size_t msglen = strlen(LEAVE_MSG);
 	SC(writen(client_sock, LEAVE_MSG, msglen));
-   
 	char* msg = readn(client_sock); 
 	free(msg);
 	return OS_OK;
@@ -140,7 +137,6 @@ int os_disconnect() {
 }
 
 const char* get_ko_msg(char* buf) {
-
 	char* ko_tok = strtok(buf, " ");
 	if(strcmp(ko_tok, "KO") == 0) {
 		return (buf + 3);

@@ -144,21 +144,21 @@ void handle_cmd(char* cmd, char* rest, struct client_info_s* client) {
 			SC(read(client->client_fd, data, data_len));
 
 			store_data(client, name, data_len, data);
-		} else if(strcmp(cmd, "RETRIEVE")) {
-			char* name = strtok(rest, "\n");
-			if (!retrieve_data(client, name)) {
+			send_ok(client->client_fd);
+		} else if(strcmp(cmd, "RETRIEVE") == 0) {
+			char* name = strtok(rest, " \n");
+			if (retrieve_data(client, name) != 0) {
 				send_ko(client->client_fd, "Client doesn't have that object");
 			}
-		} else if(strcmp(cmd, "DELETE")) {
-			char* name = strtok(rest, "\n");
-			if(!delete_data(client, name)) {
+		} else if(strcmp(cmd, "DELETE") == 0) {
+			char* name = strtok(rest, " \n");
+			if(delete_data(client, name) != 0) {
 				send_ko(client->client_fd, "Client doesn't have that object");
 			} else {
 				send_ok(client->client_fd);
 			}
-		} else if(strcmp(cmd, "LEAVE")) {
+		} else if(strcmp(cmd, "LEAVE") == 0) {
 			disconnect_client(client);
-			send_ok(client->client_fd);
 		} else {
 			send_ko(client->client_fd, "Unrecognised command!");
 		}
@@ -213,7 +213,7 @@ int retrieve_data(struct client_info_s *client, char* data_name) {
 	FILE* file = fopen(path, "r");
 	if (file != NULL) {
 		char buf[BUF_SIZE];
-		char* read_data;
+		char* read_data = NULL;
 		size_t read_bytes = 0, read_now = 0;
 		while((read_now = fread(buf, sizeof(char), BUF_SIZE, file)) > 0 ){
 			read_data = (char*)realloc(read_data, sizeof(char) * (read_bytes + read_now) + 1 );
@@ -222,11 +222,13 @@ int retrieve_data(struct client_info_s *client, char* data_name) {
 		}	
 		read_data[read_bytes] = '\0';
 		char msg[MAX_LINE_LENGTH];	
-		sprintf(msg, "DATA %lu \n ", read_bytes);
+		sprintf(msg, "DATA %lu \n", read_bytes);
 
 		SC(writen(client->client_fd, msg, strlen(msg)));
 		SC(writen(client->client_fd, read_data, read_bytes));
 		return 0;
+	} else {
+		perror("[ Object Store ] RETRIEVE could not open the file");
 	}
 	return -1;
 }
@@ -240,6 +242,7 @@ int disconnect_client(struct client_info_s *client) {
 	}
 
 	client->is_connected = 0;
+	send_ok(client->client_fd);
 	close(client->client_fd);
 	return 0;
 }

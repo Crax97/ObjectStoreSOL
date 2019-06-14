@@ -35,10 +35,9 @@ char* readn(int fd) {
 int writen (int fd, const char* buf, size_t buflen) {
 	if(buf != NULL) {
 		size_t total_written = 0;
-		while(buflen > 0) {
+		while(total_written < buflen) {
 			size_t written_now = 0;
-			SC(written_now = write(fd, buf, buflen ));
-			buflen -= written_now;
+			SC(written_now = write(fd, buf, buflen));
 			total_written += written_now;
 		}
 		return total_written;
