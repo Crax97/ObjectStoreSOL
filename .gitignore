@@ -1,5 +1,6 @@
 *.swp
 *.o
+*.dSYM
 .DS_Store
 libs/*
 libs
