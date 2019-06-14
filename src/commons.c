@@ -24,6 +24,7 @@ char* read_to_newline(int fd) {
 			if( chonk_pos == CHUNK_SIZE || c == '\n') {
 				chonk[chonk_pos] = '\0';
 				msg = (char*)realloc(msg, (total_read + chonk_pos) * sizeof(char));
+				chonk_pos = 0;
 				strcat(msg, chonk);
 			}
 		}
