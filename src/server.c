@@ -34,6 +34,7 @@ struct client_info_s {
 };
 
 struct server_info_s {
+	int fd;
 	struct client_info_s* clients;
 	struct client_info_s* clients_head;
 	size_t clients_connected;
@@ -45,7 +46,9 @@ struct server_info_s server;
 int SERVER_RUNNING = 1;
 
 void remove_from_active_clients(struct client_info_s* client);
-void sigusr_handler(int sig);
+void sigusr_handler_f(int sig);
+void sigint_handler_f(int sig);
+void handle_exit(void);
 
 void* thread_worker(void* args);
 void* signal_thread_worker(void* args);
@@ -74,12 +77,13 @@ int main(int argc, char** argv) {
 	server.clients = NULL;
 	server.clients_head = NULL;
 	server.clients_connected = 0;
+	server.fd = socket_fd;
 
 	mkdir("data", DEFAULT_MASK);
 
 	sigset_t signals;
 	sigemptyset(&signals);
-	pthread_sigmask(SIG_SETMASK, &signals, NULL);
+	//pthread_sigmask(SIG_SETMASK, &signals, NULL);
 
 	pthread_t signal_thread;
 	SC(pthread_create(&signal_thread, NULL, signal_thread_worker, NULL));
@@ -92,6 +96,17 @@ int main(int argc, char** argv) {
 		create_worker_for_fd( &server, client_fd );
 	}
 
+}
+
+void handle_exit() {
+	SERVER_RUNNING = 0;
+	shutdown(server.fd, SHUT_RDWR);
+	printf("[Object Store]: Waiting for all the workers to end their job\n");
+	while(server.clients_connected > 0) {
+		//Waiting for all the threads to finish their work	
+	}
+	printf("[Object Store] Bye bye!\n");
+	unlink(SOCKNAME);
 }
 
 void create_worker_for_fd(struct server_info_s *info, int client_fd) {
@@ -107,6 +122,7 @@ void create_worker_for_fd(struct server_info_s *info, int client_fd) {
 	if(server.clients == NULL) {
 		server.clients = client;
 	}
+	server.clients_connected ++;
 
 	pthread_mutex_unlock(&server_info_mutex);
 
@@ -129,9 +145,14 @@ void* signal_thread_worker(void* args) {
 	sigaction(SIGPIPE, &sigpipe_handler, NULL);
 
 	struct sigaction sigusr1_handler = {0};
-	sigusr1_handler.sa_handler = sigusr_handler;
+	sigusr1_handler.sa_handler = sigusr_handler_f;
 	sigusr1_handler.sa_flags = SA_RESTART;
 	sigaction(SIGUSR1, &sigusr1_handler, NULL);
+
+	struct sigaction sigint_handler = {0};
+	sigint_handler.sa_handler = sigint_handler_f;
+	sigusr1_handler.sa_flags = SA_RESTART;
+	sigaction(SIGINT, &sigint_handler, NULL);
 
 	while(SERVER_RUNNING) {
 		int signal;
@@ -141,8 +162,13 @@ void* signal_thread_worker(void* args) {
 
 	pthread_exit(NULL);
 }
-void sigusr_handler(int sig) {
+void sigusr_handler_f(int sig) {
 	server_print_info(&server);
+}
+
+void sigint_handler_f(int sig) {
+	printf("[Object Store] Received SIGINT, starting quit procedure\n");
+	handle_exit();
 }
 
 void gather_directory_elts_and_size(DIR* dir, size_t* elts, size_t* size) {
@@ -395,6 +421,7 @@ void remove_from_active_clients(struct client_info_s* client) {
 
 int disconnect_client(struct client_info_s *client) {
 	remove_from_active_clients(client);
+	server.clients_connected --;
 	client->is_connected = 0;
 	int result = send_ok(client->client_fd);
 	close(client->client_fd);

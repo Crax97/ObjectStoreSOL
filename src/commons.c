@@ -28,6 +28,9 @@ char* read_to_newline(int fd) {
 				strcat(msg, chonk);
 			}
 		}
+		if (c == EOF) {
+			return NULL;
+		}
 	}
 	return msg;
 }
@@ -38,9 +41,17 @@ char* read_data(int fd, size_t len) {
 	SC(read(fd, &useless, 1)); // Useless read because data segments have an useless space in front of them
 	size_t total_read = 0;
 	while( total_read < len) {
+		errno = 0;
 		int	read_now = read(fd, msg + total_read, len - total_read);
 		if(read_now > 0) {
 			total_read += read_now;
+		} else {
+			if(errno == EAGAIN) {
+				continue;
+			} else {
+				free(msg);
+				return NULL;
+			}
 		}
 	}
 	return msg;

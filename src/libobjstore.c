@@ -130,6 +130,7 @@ int os_disconnect() {
 	SC(writen(client_sock, LEAVE_MSG, msglen));
 	char* msg = read_to_newline(client_sock); 
 	free(msg);
+	close(client_sock);
 	return OS_OK;
 
 }
