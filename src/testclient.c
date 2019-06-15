@@ -8,7 +8,7 @@
 #define ASSERT(expr) if(!(expr)) { EXITTHESHIP( "Assert failed: " #expr );}
 
 #define TEST_1_INITIAL_SIZE 100
-#define TEST_1_FINAL_SIZE 1000000
+#define TEST_1_FINAL_SIZE 100000
 #define TEST_1_NUM_ROUNDS 20
 
 #define LOREM_IPSUM "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla convallis suscipit quam. Aenean amet."
@@ -100,6 +100,7 @@ void test_1() {
 void test_2() {
 	for(size_t i = 0; i < TEST_1_NUM_ROUNDS; i ++) {
 		char* retrieved = (char*)os_retrieve(names[i]);
+		ASSERT(strlen(retrieved) == lengths[i]);
 		ASSERT(strcmp(retrieved, datas[i]) == 0);
 		free(retrieved);
 	}

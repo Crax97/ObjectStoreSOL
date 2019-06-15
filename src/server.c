@@ -203,7 +203,7 @@ void* thread_worker(void* args) {
 		char* msg = read_to_newline(my_info->client_fd);
 		errno = 0;
 		
-		if(msg != NULL) {
+		if(msg != NULL && strlen(msg) > 0) {
 			printf("[Object Store] Got %s", msg); 
 			int result = handle_cmd(msg, my_info);
 			if(result < 0) {
@@ -225,7 +225,6 @@ void* thread_worker(void* args) {
 int handle_cmd(char* msg, struct client_info_s* client) {
 	char* last = NULL;
 	char* cmd = strtok_r(msg, " ", &last);
-	int result = 0;
 	if(cmd != NULL) {
 		if (strcmp(cmd, "REGISTER") == 0) {
 			if(client->has_registered == 0) {
@@ -255,35 +254,35 @@ int handle_cmd(char* msg, struct client_info_s* client) {
 				}
 				store_data(client, data_name, data_len, data);
 				free(data);
-				result = send_ok(client->client_fd);
+				return send_ok(client->client_fd);
 			} else if(strcmp(cmd, "RETRIEVE") == 0) {
 				char* data_name = strtok_r(NULL, " \n", &last);
 				if (data_name == NULL) {
-					return -1;
+					return send_ko(client->client_fd, "Client didn't send the name of the object");
 				}
 				if (retrieve_data(client, data_name) != 0) {
-					result = send_ko(client->client_fd, "Client doesn't have that object");
+					return send_ko(client->client_fd, "Client doesn't have that object");
 				}
 			} else if(strcmp(cmd, "DELETE") == 0) {
 				char* data_name = strtok_r(NULL, " \n", &last);
 				if(data_name == NULL) {
-					return -1;
+					return send_ko(client->client_fd, "Client didn't send the name of the object to delete");
 				}
 				if(delete_data(client, data_name) != 0) {
-					result = send_ko(client->client_fd, "Client doesn't have that object");
+					return send_ko(client->client_fd, "Client doesn't have that object");
 				} else {
-					result = send_ok(client->client_fd);
+					return send_ok(client->client_fd);
 				}
 			} else if(strcmp(cmd, "LEAVE") == 0) {
-				result = disconnect_client(client);
+				return disconnect_client(client);
 			} else {
-				result = send_ko(client->client_fd, "Unrecognised command!");
+				return send_ko(client->client_fd, "Unrecognised command!");
 			}
 		} else {
-			result = send_ko(client->client_fd, "Client hasn't registered");
+			return send_ko(client->client_fd, "Client hasn't registered");
 		}
 	}
-	return result;
+	return 0;
 }
 
 // Make it so that it retunrns != 1 only if ther's an unrecoverable error
@@ -330,24 +329,27 @@ int retrieve_data(struct client_info_s *client, char* data_name) {
 
 	FILE* file = fopen(path, "r");
 	if (file != NULL) {
-		char buf[BUF_SIZE];
-		char* read_data = NULL;
-		size_t read_bytes = 0, read_now = 0;
-		while((read_now = fread(buf, sizeof(char), BUF_SIZE, file)) > 0 ){
-			read_data = (char*)realloc(read_data, sizeof(char) * (read_bytes + read_now) + 1 );
-			memcpy(read_data + read_bytes, buf, read_now);
-			read_bytes += read_now;
-		}	
-		read_data[read_bytes] = '\0';
-		char msg[MAX_LINE_LENGTH];	
-		sprintf(msg, "DATA %lu \n ", read_bytes);
+		struct stat info;
+		SC(stat(path, &info));
+		
+		size_t len = info.st_size;
+		char* data = (char*) calloc(len, sizeof(char));	
 
-		if (writen(client->client_fd, msg, strlen(msg)) < 0) {
+		while(len > 0) {
+			size_t now = fread(data, sizeof(char), len, file);
+			len -= now;
+		}
+		char fmt[] = "DATA %lu \n ";
+		char data_header[30];
+		sprintf(data_header, fmt, info.st_size);
+		if(writen(client->client_fd, data_header, strlen(data_header)) < 0) {
+			return -1;
+		}	
+	
+		if(writen(client->client_fd, data, info.st_size) < 0) {
 			return -1;
 		}
-		if (writen(client->client_fd, read_data, read_bytes) < 0) {
-			return -1;
-		}
+		free(data);
 		return 0;
 	} else {
 		perror("[ Object Store ] RETRIEVE could not open the file");
