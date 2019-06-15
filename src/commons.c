@@ -28,7 +28,6 @@ char* read_to_newline(int fd) {
 				strcat(msg, chonk);
 			} 
 		} else {
-			printf("Detected something unusual\n");
 			free(msg);
 			return NULL;
 		}
@@ -52,7 +51,6 @@ char* read_data(int fd, size_t len) {
 			total_read += read_now;
 		} else {
 			free(msg);
-			printf("read_data NULL");
 			return NULL;
 		}
 	}

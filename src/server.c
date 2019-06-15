@@ -40,7 +40,6 @@ struct server_info_s {
 	size_t clients_connected;
 };
 
-
 pthread_mutex_t server_info_mutex = PTHREAD_MUTEX_INITIALIZER;
 struct server_info_s server;
 int SERVER_RUNNING = 1;
@@ -48,7 +47,9 @@ int SERVER_RUNNING = 1;
 void remove_from_active_clients(struct client_info_s* client);
 void sigusr_handler_f(int sig);
 void sigint_handler_f(int sig);
+void sigpipe_handler_f(int sig);
 void handle_exit(void);
+void close_everyone(void);
 
 void* thread_worker(void* args);
 void* signal_thread_worker(void* args);
@@ -83,10 +84,11 @@ int main(int argc, char** argv) {
 
 	sigset_t signals;
 	sigemptyset(&signals);
-	//pthread_sigmask(SIG_SETMASK, &signals, NULL);
+	pthread_sigmask(SIG_SETMASK, &signals, NULL);
 
 	pthread_t signal_thread;
 	SC(pthread_create(&signal_thread, NULL, signal_thread_worker, NULL));
+
 
 	while(1) {
 		int client_fd = 0;
@@ -101,12 +103,15 @@ int main(int argc, char** argv) {
 void handle_exit() {
 	SERVER_RUNNING = 0;
 	shutdown(server.fd, SHUT_RDWR);
-	printf("[Object Store]: Waiting for all the workers to end their job\n");
+	printf("[Object Store] Waiting for all the workers to end their job\n");
+	close_everyone();
+
 	while(server.clients_connected > 0) {
 		//Waiting for all the threads to finish their work	
 	}
 	printf("[Object Store] Bye bye!\n");
 	unlink(SOCKNAME);
+	exit(EXIT_SUCCESS);
 }
 
 void create_worker_for_fd(struct server_info_s *info, int client_fd) {
@@ -130,7 +135,7 @@ void create_worker_for_fd(struct server_info_s *info, int client_fd) {
 	SC(pthread_create(&worker_thread, NULL, thread_worker, client)); 
 	SC(pthread_detach(worker_thread));
 	client->client_thread = worker_thread;
-	printf("[ Object Store ] Got a new Client: %d\n", client_fd);
+	printf("[Object Store] Got a new Client, assigning fd  %d\n", client_fd);
 }
 
 void* signal_thread_worker(void* args) {
@@ -139,11 +144,6 @@ void* signal_thread_worker(void* args) {
 	pthread_sigmask(SIG_SETMASK, &set, NULL);	
 
 	// This warning is a bug
-	struct sigaction sigpipe_handler = {0};
-	sigpipe_handler.sa_handler = SIG_IGN;
-	sigpipe_handler.sa_flags = SA_RESTART;
-	sigaction(SIGPIPE, &sigpipe_handler, NULL);
-
 	struct sigaction sigusr1_handler = {0};
 	sigusr1_handler.sa_handler = sigusr_handler_f;
 	sigusr1_handler.sa_flags = SA_RESTART;
@@ -151,8 +151,13 @@ void* signal_thread_worker(void* args) {
 
 	struct sigaction sigint_handler = {0};
 	sigint_handler.sa_handler = sigint_handler_f;
-	sigusr1_handler.sa_flags = SA_RESTART;
+	sigint_handler.sa_flags = SA_RESTART;
 	sigaction(SIGINT, &sigint_handler, NULL);
+
+	struct sigaction sigpipe_handler = {0};
+	sigpipe_handler.sa_handler = sigpipe_handler_f;
+	sigpipe_handler.sa_flags = SA_RESTART;
+	sigaction(SIGPIPE, &sigpipe_handler, NULL);
 
 	while(SERVER_RUNNING) {
 		int signal;
@@ -164,6 +169,10 @@ void* signal_thread_worker(void* args) {
 }
 void sigusr_handler_f(int sig) {
 	server_print_info(&server);
+}
+
+void sigpipe_handler_f(int sig) {
+	printf("[Object Store] received SIGPIPE, someone died\n");
 }
 
 void sigint_handler_f(int sig) {
@@ -235,7 +244,7 @@ void* thread_worker(void* args) {
 				my_info->is_connected = 0;
 			}
 		} else {
-			printf("[Object Store] Got empty header, closing connection\n");
+			printf("[Object Store] Socket for %s was closed\n", my_info->client_name);
 			remove_from_active_clients(my_info);
 			close(my_info->client_fd);
 			my_info->is_connected = 0;
@@ -261,7 +270,7 @@ int handle_cmd(char* msg, struct client_info_s* client) {
 	char* last = NULL;
 	char* cmd = strtok_r(msg, " ", &last);
 	if(cmd != NULL) {
-		printf("[Object Store] Handling %s from %d\n", cmd, client->client_fd);
+		printf("[Object Store] Handling %s from %s\n", cmd, client->has_registered ? client->client_name : "[Not registered yet]");
 		if (strcmp(cmd, "REGISTER") == 0) {
 			if(client->has_registered == 0) {
 				char* name = strtok_r(NULL, " \n", &last);
@@ -419,9 +428,16 @@ void remove_from_active_clients(struct client_info_s* client) {
 	pthread_mutex_unlock(&server_info_mutex);
 }
 
+void close_everyone() {
+	struct client_info_s* client = server.clients;
+	while(client != NULL) {
+		SC(close(client->client_fd));
+		client = client->next;
+	}
+}
+
 int disconnect_client(struct client_info_s *client) {
 	remove_from_active_clients(client);
-	server.clients_connected --;
 	client->is_connected = 0;
 	int result = send_ok(client->client_fd);
 	close(client->client_fd);
