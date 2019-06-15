@@ -1,5 +1,5 @@
 DIRECTORY=src
-CFLAGS += -g -std=c99 -pedantic -Wall
+CFLAGS += -g -std=c99 -pedantic -Wall -Wmissing-field-initializers
 CC = gcc
 .PHONY = clean
 

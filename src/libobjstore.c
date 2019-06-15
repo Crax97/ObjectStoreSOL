@@ -28,11 +28,6 @@ int os_connect(char* name) {
 		return OS_ERR;
 	}	
 
-	if(fcntl(client_sock, F_SETFL, O_NONBLOCK) == -1) {
-		perror("Failed to set nonblocking IO on client socked");
-		return OS_ERR;
-	}
-
 	char buf[MAX_LINE_LENGTH + 1];
 	sprintf(buf, REGISTER_STR, name);
 	size_t msglen = strlen(buf);

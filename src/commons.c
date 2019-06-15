@@ -33,26 +33,22 @@ char* read_to_newline(int fd) {
 }
 
 char* read_data(int fd, size_t len) {
-	char chonk[CHUNK_SIZE + 1];
-	char* msg = NULL;
+	char* msg = (char*)calloc(len + 1, sizeof(char));
+	msg[len] = '\0';
 
-	SC(read(fd, chonk, 1)); // Useless read because data segments have an useless space in front of them
+	char useless;
+	SC(read(fd, &useless, 1)); // Useless read because data segments have an useless space in front of them
 
 	size_t total_read = 0;
 	int read_now = 0;
-	while( total_read < len ) {
-		chonk[0] = '\0';
+	while( total_read < len + 1) {
 
-		size_t read_this_round = CHUNK_SIZE;
-		if ( len - total_read < CHUNK_SIZE) {
-			read_this_round = len - total_read;
-		}
-		read_now = read(fd, chonk, read_this_round);
-		if(read_now > 0) {
-			total_read += read_now;
-			msg = (char*) realloc(msg, sizeof(char) * total_read);
-			strcpy(msg, chonk);
-		}
+		read_now = read(fd, msg + total_read, len);
+		//if(read_now < 0) {
+		//	free(msg);
+		//	return NULL;
+		//}
+		total_read += read_now;
 	}
 	return msg;
 }

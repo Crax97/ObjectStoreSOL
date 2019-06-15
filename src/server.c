@@ -114,6 +114,7 @@ void create_worker_for_fd(struct server_info_s *info, int client_fd) {
 
 	pthread_t worker_thread;
 	SC(pthread_create(&worker_thread, NULL, thread_worker, client)); 
+	SC(pthread_detach(worker_thread));
 	client->client_thread = worker_thread;
 	printf("[ Object Store ] Got a new Client: %d\n", client_fd);
 }
@@ -123,6 +124,7 @@ void* signal_thread_worker(void* args) {
 	sigfillset(&set);
 	pthread_sigmask(SIG_SETMASK, &set, NULL);	
 
+	// This warning is a bug
 	struct sigaction sigpipe_handler = {0};
 	sigpipe_handler.sa_handler = SIG_IGN;
 	sigpipe_handler.sa_flags = SA_RESTART;
@@ -203,7 +205,17 @@ void* thread_worker(void* args) {
 		
 		if(msg != NULL) {
 			printf("[Object Store] Got %s", msg); 
-			handle_cmd(msg, my_info);
+			int result = handle_cmd(msg, my_info);
+			if(result < 0) {
+				printf("[Object Store] Something failed while trying to communicate with %d. Closing connection\n", my_info->client_fd);
+				close(my_info->client_fd);
+				my_info->is_connected = 0;
+			}
+		} else {
+			printf("[Object Store] Got empty header, closing connection\n");
+			remove_from_active_clients(my_info);
+			close(my_info->client_fd);
+			my_info->is_connected = 0;
 		}
 
 	}	
@@ -216,14 +228,13 @@ int handle_cmd(char* msg, struct client_info_s* client) {
 	int result = 0;
 	if(cmd != NULL) {
 		if (strcmp(cmd, "REGISTER") == 0) {
-			if(!client->has_registered) {
+			if(client->has_registered == 0) {
 				char* name = strtok_r(NULL, " \n", &last);
-				strcpy(client->client_name, name);
-				if(strlen(client->client_name)== 0) { 
+				if(name == NULL || strlen(name) == 0) {
 					return send_ko(client->client_fd, "REGISTER: No name provided");;
 				}
-	
-				register_client(client);
+				strcpy(client->client_name, name);
+				SC(register_client(client));
 				return send_ok(client->client_fd);
 			} else {
 				return send_ko(client->client_fd, "Client has already registered on the server!");
@@ -275,6 +286,7 @@ int handle_cmd(char* msg, struct client_info_s* client) {
 	return result;
 }
 
+// Make it so that it retunrns != 1 only if ther's an unrecoverable error
 int register_client(struct client_info_s *client) {
 	char path[PATH_MAX];
 	sprintf(path, "%s/%s", "data", client->client_name);
@@ -282,9 +294,8 @@ int register_client(struct client_info_s *client) {
 	if(stat(path, &dir) != 0) {
 		mkdir(path, DEFAULT_MASK);
 	}
-
 	client->has_registered = 1;
-
+	return 1;
 }
 
 int store_data(struct client_info_s *client, char* data_name, size_t data_len, char* data) {
@@ -299,7 +310,7 @@ int store_data(struct client_info_s *client, char* data_name, size_t data_len, c
 
 	size_t written = 0;
 	while(written < data_len) {
-		size_t now = fwrite(data, sizeof(char), (data_len - written), file);
+		size_t now = fwrite(data, sizeof(char), data_len, file);
 		written += now;
 	}
 	fclose(file);
