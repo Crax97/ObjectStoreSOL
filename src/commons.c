@@ -26,17 +26,22 @@ char* read_to_newline(int fd) {
 				msg = (char*)realloc(msg, (total_read + chonk_pos) * sizeof(char));
 				chonk_pos = 0;
 				strcat(msg, chonk);
-			}
-		}
-		if (c == EOF) {
+			} 
+		} else {
+			printf("Detected something unusual\n");
+			free(msg);
 			return NULL;
 		}
 	}
+
+	msg = (char*)realloc(msg, (total_read + 1) * sizeof(char));
+	msg[total_read] = '\0';
+
 	return msg;
 }
 
 char* read_data(int fd, size_t len) {
-	char* msg = (char*)calloc(len, sizeof(char));
+	char* msg = (char*)calloc(len + 1, sizeof(char));
 	char useless;
 	SC(read(fd, &useless, 1)); // Useless read because data segments have an useless space in front of them
 	size_t total_read = 0;
@@ -46,14 +51,12 @@ char* read_data(int fd, size_t len) {
 		if(read_now > 0) {
 			total_read += read_now;
 		} else {
-			if(errno == EAGAIN) {
-				continue;
-			} else {
-				free(msg);
-				return NULL;
-			}
+			free(msg);
+			printf("read_data NULL");
+			return NULL;
 		}
 	}
+
 	return msg;
 }
 
