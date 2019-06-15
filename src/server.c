@@ -52,6 +52,7 @@ void* signal_thread_worker(void* args);
 int send_ok(int fd);
 int send_ko(int fd, const char* msg);
 int handle_cmd(char* msg, struct client_info_s *client);
+int check_client_name_unique(char* name);
 
 // Server stuff
 int register_client(struct client_info_s *client);
@@ -61,8 +62,6 @@ int delete_data(struct client_info_s *client, char* data_name);
 int disconnect_client(struct client_info_s *client);
 
 int main(int argc, char** argv) {
-	//TBR
-	unlink(SOCKNAME);
 	struct sockaddr_un sock;	
 	sock.sun_family = AF_UNIX;
 	strcpy(sock.sun_path, SOCKNAME);			
@@ -99,16 +98,15 @@ void create_worker_for_fd(struct server_info_s *info, int client_fd) {
 	struct client_info_s* client = (struct client_info_s*)  malloc(sizeof(struct client_info_s));
 	pthread_mutex_lock(&server_info_mutex);
 
-	if( fcntl(client_fd, F_SETFL, O_NONBLOCK) == -1) {
-		perror("Failed to enable non-blocking IO for file descriptor");
-	}
-
 	client->has_registered = 0;
 	client->is_connected = 1;
 	client->client_fd = client_fd;
 	client->next = NULL;
 	client->prec = info->clients_head;
-	info->clients_head = client;	
+
+	if(server.clients == NULL) {
+		server.clients = client;
+	}
 
 	pthread_mutex_unlock(&server_info_mutex);
 
@@ -204,7 +202,6 @@ void* thread_worker(void* args) {
 		errno = 0;
 		
 		if(msg != NULL && strlen(msg) > 0) {
-			printf("[Object Store] Got %s", msg); 
 			int result = handle_cmd(msg, my_info);
 			if(result < 0) {
 				printf("[Object Store] Something failed while trying to communicate with %d. Closing connection\n", my_info->client_fd);
@@ -222,15 +219,33 @@ void* thread_worker(void* args) {
 	pthread_exit(NULL);
 }
 
+int check_client_name_unique(char* name) {
+	struct client_info_s* current_client = server.clients;
+	while(current_client != NULL) {
+		if(strcmp(name, current_client->client_name) == 0) {
+			return -1;
+		}
+		current_client = current_client->next;
+	}
+	return 0;
+}
+
 int handle_cmd(char* msg, struct client_info_s* client) {
+
 	char* last = NULL;
 	char* cmd = strtok_r(msg, " ", &last);
 	if(cmd != NULL) {
+		printf("[Object Store] Handling %s from %d\n", cmd, client->client_fd);
 		if (strcmp(cmd, "REGISTER") == 0) {
 			if(client->has_registered == 0) {
 				char* name = strtok_r(NULL, " \n", &last);
 				if(name == NULL || strlen(name) == 0) {
 					return send_ko(client->client_fd, "REGISTER: No name provided");;
+				}
+
+				if(check_client_name_unique(name) < 0) {
+					printf("[Object Store] Client %d is already registered on the server with the name %s\n", client->client_fd, name);
+					return send_ko(client->client_fd, "REGISTER: Client is already registered on the server");
 				}
 				strcpy(client->client_name, name);
 				SC(register_client(client));
