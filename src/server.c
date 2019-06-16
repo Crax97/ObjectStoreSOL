@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <sched.h>
 #include <string.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
@@ -14,7 +15,7 @@
 #include <sys/dir.h>
 #include <limits.h>
 #include <errno.h>
-#include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 
 #define MAX_CLIENT_NAME_LEN 100
@@ -42,6 +43,7 @@ struct server_info_s {
 };
 
 pthread_mutex_t server_info_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t server_disconnect = PTHREAD_COND_INITIALIZER;
 struct server_info_s server;
 volatile int SERVER_RUNNING = 1;
 
@@ -103,44 +105,16 @@ int main(int argc, char** argv) {
 
 void handle_exit() {
 	SERVER_RUNNING = 0;
-	unlink(SOCKNAME);
-	printf("[Object Store] Waiting for all the workers to end their job\n");
 	close_everyone();
+	unlink(SOCKNAME);
 
-
-	while(server.clients_connected > 0) {
-		//Waiting for all the threads to finish their work	
+	while(server.clients == NULL) {
+		sched_yield();
+		printf("Clients connected: %lu\n", server.clients_connected);
 	}
+
 	printf("[Object Store] Bye bye!\n");
 	exit(EXIT_SUCCESS);
-}
-
-void create_worker_for_fd(struct server_info_s *info, int client_fd) {
-	struct client_info_s* client = (struct client_info_s*)  malloc(sizeof(struct client_info_s));
-	pthread_mutex_lock(&server_info_mutex);
-
-	client->has_registered = 0;
-	client->is_connected = 1;
-	client->client_fd = client_fd;
-	client->next = NULL;
-	client->prec = info->clients_head;
-
-	if(server.clients == NULL) {
-		server.clients = client;
-	}
-
-	if(server.clients_head == NULL) {
-		server.clients_head = client;
-	}
-	server.clients_connected ++;
-
-	pthread_mutex_unlock(&server_info_mutex);
-
-	pthread_t worker_thread;
-	SC(pthread_create(&worker_thread, NULL, thread_worker, client)); 
-	SC(pthread_detach(worker_thread));
-	client->client_thread = worker_thread;
-	printf("[Object Store] Got a new Client, assigning fd  %d\n", client_fd);
 }
 
 void* signal_thread_worker(void* args) {
@@ -240,28 +214,36 @@ void server_print_info(const struct server_info_s* info) {
 
 void* thread_worker(void* args) {
 	struct client_info_s* my_info = (struct client_info_s*)args;
+	struct pollfd fd;
+	fd.fd = my_info->client_fd;
+	fd.events = POLLIN;
+
 	while(SERVER_RUNNING && my_info->is_connected) {
-		char* msg = read_to_newline(my_info->client_fd);
-		errno = 0;
+		int ready = poll(&fd, 1, 1000);
+		if(ready == 1) {
 		
-		if(msg != NULL && strlen(msg) > 0) {
-			int result = handle_cmd(msg, my_info);
-			if(result < 0) {
-				printf("[Object Store] Something failed while trying to communicate with %d. Closing connection\n", my_info->client_fd);
-				close(my_info->client_fd);
+			char* msg = read_to_newline(my_info->client_fd);
+			if(msg != NULL && strlen(msg) > 0) {
+				int result = handle_cmd(msg, my_info);
+				if(result < 0) {
+					printf("[Object Store] Something failed while trying to communicate with %d. Closing connection\n", my_info->client_fd);
+					my_info->is_connected = 0;
+				}
+			} else {
+				printf("[Object Store] Socket for %s was closed\n", my_info->client_name);
 				my_info->is_connected = 0;
 			}
+			free(msg);
 		} else {
-			printf("[Object Store] Socket for %s was closed\n", my_info->client_name);
-			remove_from_active_clients(my_info);
-			close(my_info->client_fd);
-			my_info->is_connected = 0;
+			sched_yield();
 		}
-		free(msg);
-
 	}	
 	printf("[Object Store] Thread worker for %s %d ended\n", my_info->client_name, my_info->client_fd);
+
+	remove_from_active_clients(my_info);
+	close(my_info->client_fd);
 	free(my_info);
+
 	pthread_exit(NULL);
 }
 
@@ -425,31 +407,65 @@ int retrieve_data(struct client_info_s *client, char* data_name) {
 	return OS_ERR;
 }
 
+void create_worker_for_fd(struct server_info_s *info, int client_fd) {
+	struct client_info_s* client = (struct client_info_s*)  malloc(sizeof(struct client_info_s));
+	pthread_mutex_lock(&server_info_mutex);
+
+	client->has_registered = 0;
+	client->is_connected = 1;
+	client->client_fd = client_fd;
+	client->next = NULL;
+	client->prec = info->clients_head;
+	if(client->prec != NULL) {
+		client->prec->next = client;
+	}
+
+	info->clients_head = client;
+	if(info->clients == NULL) {
+		info->clients = client;
+	}
+
+	info->clients_connected ++;
+
+	pthread_mutex_unlock(&server_info_mutex);
+
+	pthread_t worker_thread;
+	SC(pthread_create(&worker_thread, NULL, thread_worker, client)); 
+	SC(pthread_detach(worker_thread));
+	client->client_thread = worker_thread;
+	printf("[Object Store] Got a new Client, assigning fd  %d\n", client_fd);
+}
+
+
 void remove_from_active_clients(struct client_info_s* client) {
 	pthread_mutex_lock(&server_info_mutex);
-	if(client->prec != NULL) {
-		client->prec->next = client->next;
+	
+	struct client_info_s* prec = client->prec, *next =client->next;
+
+	if(prec != NULL) {
+		prec->next = next;
 	}
-	if(client->next != NULL) {
-		client->next->prec = client->prec;
+	if(next!= NULL) {
+		next->prec = prec;
 	}
 
 	if (server.clients_head == client) {
-		server.clients_head = client->prec;
+		server.clients_head = prec;
 	}
 
 	if(server.clients == client) {
-		server.clients = client->next;
+		server.clients = next;
 	}
 
 	server.clients_connected --;
+	pthread_cond_signal(&server_disconnect);
 	pthread_mutex_unlock(&server_info_mutex);
 }
 
 void close_everyone() {
 	struct client_info_s* client = server.clients;
 	while(client != NULL) {
-		SC(close(client->client_fd));
+		close(client->client_fd);
 		client = client->next;
 	}
 }
@@ -457,8 +473,6 @@ void close_everyone() {
 int disconnect_client(struct client_info_s *client) {
 	client->is_connected = 0;
 	int result = send_ok(client->client_fd);
-	close(client->client_fd);
-	remove_from_active_clients(client);
 	return result;
 }
 
