@@ -17,32 +17,34 @@ int client_sock = 0;
 const char* get_ko_msg(char* buf);
 
 int os_connect(char* name) {
-	struct sockaddr_un addr;
-	addr.sun_family = AF_UNIX;
-	strcpy(addr.sun_path, SOCKNAME);
+	if(client_sock == 0) {
+		struct sockaddr_un addr;
+		addr.sun_family = AF_UNIX;
+		strcpy(addr.sun_path, SOCKNAME);
 
-	if ((client_sock = socket(AF_UNIX, SOCK_STREAM, 0)) <= 0) {
-		return OS_ERR;
+		if ((client_sock = socket(AF_UNIX, SOCK_STREAM, 0)) <= 0) {
+			return OS_ERR;
+		}
+		if (connect(client_sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+			return OS_ERR;
+		}	
+
+		char buf[MAX_LINE_LENGTH + 1];
+		sprintf(buf, REGISTER_STR, name);
+		size_t msglen = strlen(buf);
+
+		SC(writen(client_sock, buf, msglen));
+
+		char* response = read_to_newline(client_sock);
+
+		if(strcmp(response, OK_STR) == 0) {
+			return OS_OK;	
+		} else {
+			const char* ko_msg = get_ko_msg(response);
+			fprintf(stderr, ERR_MSG_FORMAT, ko_msg);
+		}
+		free(response);
 	}
-	if (connect(client_sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-		return OS_ERR;
-	}	
-
-	char buf[MAX_LINE_LENGTH + 1];
-	sprintf(buf, REGISTER_STR, name);
-	size_t msglen = strlen(buf);
-
-	SC(writen(client_sock, buf, msglen));
-
-	char* response = read_to_newline(client_sock);
-
-	if(strcmp(response, OK_STR) == 0) {
-		return OS_OK;	
-	} else {
-		const char* ko_msg = get_ko_msg(response);
-		fprintf(stderr, ERR_MSG_FORMAT, ko_msg);
-	}
-	free(response);
 	return OS_ERR;
 }
 
@@ -86,7 +88,6 @@ void* os_retrieve(char* name) {
 
 		size_t datalen = 0;
 		if (sscanf(msg, DATA_STR, &datalen) > 0) {
-			//TODO change to true readn
 			data = read_data(client_sock, datalen);
 		} else {
 			const char* ko_msg = get_ko_msg(msg);
@@ -131,6 +132,7 @@ int os_disconnect() {
 	char* msg = read_to_newline(client_sock); 
 	free(msg);
 	close(client_sock);
+	client_sock = 0;
 	return OS_OK;
 
 }

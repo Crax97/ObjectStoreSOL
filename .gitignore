@@ -6,3 +6,6 @@ libs/*
 libs
 data/*
 data
+
+*.a
+cliend_cmdline.o
