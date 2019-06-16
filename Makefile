@@ -11,13 +11,18 @@ test: testclient
 	-rm testout.log
 	touch testout.log
 	for ((i=1; i<=50; i++)); do \
-		./testclient.o client$$i 1 2>/dev/null 1>>testout.log ; \
-		if [ $$i -le 30 ]; then \
-			./testclient.o client$$i 2 2>/dev/null 1>>testout.log & \
-		else \
-			./testclient.o client$$i 3 2>/dev/null 1>>testout.log & \
-		fi  \
+		./testclient.o client$$i 1 2>/dev/null 1>>testout.log & \
 	done
+	echo Waiting for test 1 to end
+	wait
+	for((i=1; i<=30; i++)); do \
+		./testclient.o client$$i 2 2>/dev/null 1>>testout.log & \
+	done
+	for ((i=31; i<=50; i++)); do \
+		./testclient.o client$$i 3 2>/dev/null 1>>testout.log & \
+	done
+	wait
+	echo Waiting for test 2 and 3 to complete
 
 testclient: libobjstore 
 	$(CC) $(CFLAGS) $(DIRECTORY)/$@.c -Llibs/ -lobjstore -o $@.o

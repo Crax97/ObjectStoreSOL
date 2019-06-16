@@ -35,6 +35,7 @@ struct client_info_s {
 
 struct server_info_s {
 	int fd;
+	pthread_t signal_thread;
 	struct client_info_s* clients;
 	struct client_info_s* clients_head;
 	size_t clients_connected;
@@ -42,7 +43,7 @@ struct server_info_s {
 
 pthread_mutex_t server_info_mutex = PTHREAD_MUTEX_INITIALIZER;
 struct server_info_s server;
-int SERVER_RUNNING = 1;
+volatile int SERVER_RUNNING = 1;
 
 void remove_from_active_clients(struct client_info_s* client);
 void sigusr_handler_f(int sig);
@@ -59,7 +60,7 @@ int handle_cmd(char* msg, struct client_info_s *client);
 int check_client_name_unique(char* name);
 
 // Server stuff
-int register_client(struct client_info_s *client);
+int register_client(struct client_info_s *client, char* name);
 int store_data(struct client_info_s *client, char* data_name, size_t data_len, char* data);
 int retrieve_data(struct client_info_s *client, char* data_name);
 int delete_data(struct client_info_s *client, char* data_name);
@@ -87,9 +88,8 @@ int main(int argc, char** argv) {
 	sigemptyset(&signals);
 	pthread_sigmask(SIG_SETMASK, &signals, NULL);
 
-	pthread_t signal_thread;
-	SC(pthread_create(&signal_thread, NULL, signal_thread_worker, NULL));
-
+	SC(pthread_create(&server.signal_thread, NULL, signal_thread_worker, NULL));
+	SC(pthread_detach(server.signal_thread));
 
 	while(1) {
 		int client_fd = 0;
@@ -103,15 +103,15 @@ int main(int argc, char** argv) {
 
 void handle_exit() {
 	SERVER_RUNNING = 0;
-	shutdown(server.fd, SHUT_RDWR);
+	unlink(SOCKNAME);
 	printf("[Object Store] Waiting for all the workers to end their job\n");
 	close_everyone();
+
 
 	while(server.clients_connected > 0) {
 		//Waiting for all the threads to finish their work	
 	}
 	printf("[Object Store] Bye bye!\n");
-	unlink(SOCKNAME);
 	exit(EXIT_SUCCESS);
 }
 
@@ -127,6 +127,10 @@ void create_worker_for_fd(struct server_info_s *info, int client_fd) {
 
 	if(server.clients == NULL) {
 		server.clients = client;
+	}
+
+	if(server.clients_head == NULL) {
+		server.clients_head = client;
 	}
 	server.clients_connected ++;
 
@@ -253,9 +257,11 @@ void* thread_worker(void* args) {
 			close(my_info->client_fd);
 			my_info->is_connected = 0;
 		}
+		free(msg);
 
 	}	
 	printf("[Object Store] Thread worker for %s %d ended\n", my_info->client_name, my_info->client_fd);
+	free(my_info);
 	pthread_exit(NULL);
 }
 
@@ -273,14 +279,13 @@ int check_client_name_unique(char* name) {
 }
 
 int handle_cmd(char* msg, struct client_info_s* client) {
-
 	char* last = NULL;
 	char* cmd = strtok_r(msg, " ", &last);
 	if(cmd != NULL) {
 		printf("[Object Store] Handling %s from %s[%d]\n", cmd, client->has_registered ? client->client_name : "[Not registered yet]", client->client_fd);
 		if (strcmp(cmd, "REGISTER") == 0) {
 			if(client->has_registered == 0) {
-				char* name = strtok_r(NULL, " \n", &last);
+				char* name = strtok_r(NULL, " ", &last);
 				if(name == NULL || strlen(name) == 0) {
 					return send_ko(client->client_fd, "REGISTER: No name provided");;
 				}
@@ -289,8 +294,7 @@ int handle_cmd(char* msg, struct client_info_s* client) {
 					printf("[Object Store] Client %d is already registered on the server with the name %s\n", client->client_fd, name);
 					return send_ko(client->client_fd, "REGISTER: Client is already registered on the server");
 				}
-				strcpy(client->client_name, name);
-				SC(register_client(client));
+				SC(register_client(client, name));
 				return send_ok(client->client_fd);
 			} else {
 				return send_ko(client->client_fd, "Client has already registered on the server!");
@@ -334,7 +338,6 @@ int handle_cmd(char* msg, struct client_info_s* client) {
 				}
 			} else if(strcmp(cmd, "LEAVE") == 0) {
 				return disconnect_client(client);
-				free(client);
 			} else {
 				return send_ko(client->client_fd, "Unrecognised command!");
 			}
@@ -346,7 +349,7 @@ int handle_cmd(char* msg, struct client_info_s* client) {
 }
 
 // Make it so that it retunrns != 1 only if ther's an unrecoverable error
-int register_client(struct client_info_s *client) {
+int register_client(struct client_info_s *client, char* name) {
 	char path[PATH_MAX];
 	sprintf(path, "%s/%s", "data", client->client_name);
 	struct stat dir;
@@ -354,6 +357,7 @@ int register_client(struct client_info_s *client) {
 		mkdir(path, DEFAULT_MASK);
 	}
 	client->has_registered = 1;
+	strcpy(client->client_name, name);
 	return OS_OK;
 }
 
