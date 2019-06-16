@@ -34,15 +34,15 @@ int os_connect(char* name) {
 
 	SC(writen(client_sock, buf, msglen));
 
-	char* msg = read_to_newline(client_sock);
+	char* response = read_to_newline(client_sock);
 
-	if(strcmp(msg, OK_STR) == 0) {
+	if(strcmp(response, OK_STR) == 0) {
 		return OS_OK;	
 	} else {
-		const char* ko_msg = get_ko_msg(msg);
+		const char* ko_msg = get_ko_msg(response);
 		fprintf(stderr, ERR_MSG_FORMAT, ko_msg);
 	}
-	free(msg);
+	free(response);
 	return OS_ERR;
 }
 
@@ -89,7 +89,7 @@ void* os_retrieve(char* name) {
 			//TODO change to true readn
 			data = read_data(client_sock, datalen);
 		} else {
-			const char* ko_msg = get_ko_msg(buf);
+			const char* ko_msg = get_ko_msg(msg);
 			fprintf(stderr, ERR_MSG_FORMAT, ko_msg);
 		}
 		free(msg);
@@ -113,7 +113,7 @@ int os_delete(char* name) {
 			free(msg);
 			return OS_OK;
 		}	
-		const char* err_msg = get_ko_msg(buf);
+		const char* err_msg = get_ko_msg(msg);
 		fprintf(stderr, ERR_MSG_FORMAT, err_msg);
 		free(msg);
 	}
@@ -135,10 +135,10 @@ int os_disconnect() {
 
 }
 
-const char* get_ko_msg(char* buf) {
-	char* ko_tok = strtok(buf, " ");
+const char* get_ko_msg(char* msg) {
+	char* ko_tok = strtok(msg, " ");
 	if(strcmp(ko_tok, "KO") == 0) {
-		return (buf + 3);
+		return (msg + 3);
 	}
 	fprintf(stderr, ERR_MSG_FORMAT, "Buffer didn't contain a KO message");
 	exit(EXIT_FAILURE);

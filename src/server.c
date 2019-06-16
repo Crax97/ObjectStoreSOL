@@ -251,6 +251,7 @@ void* thread_worker(void* args) {
 		}
 
 	}	
+	printf("[Object Store] Thread worker for %s %d ended\n", my_info->client_name, my_info->client_fd);
 	pthread_exit(NULL);
 }
 
@@ -258,11 +259,11 @@ int check_client_name_unique(char* name) {
 	struct client_info_s* current_client = server.clients;
 	while(current_client != NULL) {
 		if(strcmp(name, current_client->client_name) == 0) {
-			return -1;
+			return OS_ERR;
 		}
 		current_client = current_client->next;
 	}
-	return 0;
+	return OS_OK;
 }
 
 int handle_cmd(char* msg, struct client_info_s* client) {
@@ -270,7 +271,7 @@ int handle_cmd(char* msg, struct client_info_s* client) {
 	char* last = NULL;
 	char* cmd = strtok_r(msg, " ", &last);
 	if(cmd != NULL) {
-		printf("[Object Store] Handling %s from %s\n", cmd, client->has_registered ? client->client_name : "[Not registered yet]");
+		printf("[Object Store] Handling %s from %s[%d]\n", cmd, client->has_registered ? client->client_name : "[Not registered yet]", client->client_fd);
 		if (strcmp(cmd, "REGISTER") == 0) {
 			if(client->has_registered == 0) {
 				char* name = strtok_r(NULL, " \n", &last);
@@ -327,6 +328,7 @@ int handle_cmd(char* msg, struct client_info_s* client) {
 				}
 			} else if(strcmp(cmd, "LEAVE") == 0) {
 				return disconnect_client(client);
+				free(client);
 			} else {
 				return send_ko(client->client_fd, "Unrecognised command!");
 			}
@@ -374,7 +376,7 @@ int delete_data(struct client_info_s *client, char* data_name) {
 
 	struct stat info;
 	if(stat(path, &info) == 0) {
-		return unlink(path);
+		return unlink(path) == 0;
 	} else {
 		return OS_ERR;
 	}
@@ -408,7 +410,7 @@ int retrieve_data(struct client_info_s *client, char* data_name) {
 		free(data);
 		return OS_OK;
 	} else {
-		perror("[Object Store] RETRIEVE could not open the file");
+		fprintf(stderr, "[Object Store] RETRIEVE could not open the file");
 	}
 	return OS_ERR;
 }
@@ -432,7 +434,7 @@ void remove_from_active_clients(struct client_info_s* client) {
 
 	server.clients_connected --;
 	pthread_mutex_unlock(&server_info_mutex);
-}
+};
 
 void close_everyone() {
 	struct client_info_s* client = server.clients;
@@ -443,15 +445,15 @@ void close_everyone() {
 }
 
 int disconnect_client(struct client_info_s *client) {
-	remove_from_active_clients(client);
 	client->is_connected = 0;
 	int result = send_ok(client->client_fd);
 	close(client->client_fd);
+	remove_from_active_clients(client);
 	return result;
 }
 
 int send_ko(int fd, const char* msg) {
-	printf("[Object Store] KO to %d: %s\n", fd, msg);
+	fprintf(stderr, "[Object Store] KO to %d: %s\n", fd, msg);
 	char buf[BUF_SIZE];
 	sprintf(buf, "KO %s \n", msg);
 	return writen(fd, buf, strlen(buf));

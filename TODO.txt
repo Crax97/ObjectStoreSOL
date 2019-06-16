@@ -1,4 +1,5 @@
 -  Uniform error signaling
+-  Unregister dead clients
 -  Better error management
 -  Refactor handle_cmd to be more readable
 -  Refactor handler methods to be more readable

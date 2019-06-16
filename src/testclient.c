@@ -6,13 +6,19 @@
 #include "libobjstore.h"
 
 #define EXITTHESHIP(msg) { fprintf(stderr, msg); exit(EXIT_FAILURE); }
-#define ASSERT(expr) if(!(expr)) { EXITTHESHIP( "Assert failed: " #expr );}
+#define ASSERT(expr) num_assertions ++; if(!(expr)) { fprintf(stderr, "[FAIL] " #expr "\n"); num_failed ++; }	\
+						else { printf("[OK] "#expr "\n"); num_passed ++;} \
+
+#define ASSERT_IF(c, e) num_assertions ++;\
+						if(c) {num_passed ++; ASSERT(e)} else {num_failed ++;} \
 
 #define TEST_1_INITIAL_SIZE 100
 #define TEST_1_FINAL_SIZE 100000
 #define TEST_1_NUM_ROUNDS 20
 
 #define LOREM_IPSUM "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla convallis suscipit quam. Aenean amet."
+size_t num_assertions, num_passed, num_failed;
+
 char*  names[TEST_1_NUM_ROUNDS];
 char* datas[TEST_1_NUM_ROUNDS];
 size_t lengths[TEST_1_NUM_ROUNDS];
@@ -60,6 +66,10 @@ int main(int argc, char** argv) {
 }
 
 void init_tests() {
+	num_assertions = 0;
+	num_failed = 0;
+	num_passed = 0;
+
 	const size_t increment = (TEST_1_FINAL_SIZE - TEST_1_INITIAL_SIZE) / TEST_1_NUM_ROUNDS;
 	char ipsum[] = LOREM_IPSUM;
 
@@ -82,6 +92,8 @@ void end_tests() {
 		free(names[i]);
 		free(datas[i]);
 	}
+
+	printf("[TEST REPORTS] Passed %lu/%lu\n", num_passed, num_assertions);
 }
 
 void str_repeat(char* buf, char* orig,  size_t len, size_t newlen) {
@@ -101,8 +113,8 @@ void test_1() {
 void test_2() {
 	for(size_t i = 0; i < TEST_1_NUM_ROUNDS; i ++) {
 		char* retrieved = (char*)os_retrieve(names[i]);
-		ASSERT(strlen(retrieved) == lengths[i]);
-		ASSERT(strcmp(retrieved, datas[i]) == 0);
+		ASSERT_IF(retrieved != NULL, strlen(retrieved) == lengths[i]);
+		ASSERT_IF(retrieved != NULL, strcmp(retrieved, datas[i]) == 0);
 		free(retrieved);
 	}
 }
