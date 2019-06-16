@@ -1,8 +1,10 @@
+#include "server.h"
+#include "commons.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <signal.h>
 #include <string.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
@@ -13,9 +15,7 @@
 #include <limits.h>
 #include <errno.h>
 #include <fcntl.h>
-
-#include "server.h"
-#include "commons.h"
+#include <signal.h>
 
 #define MAX_CLIENT_NAME_LEN 100
 #define BUF_SIZE 1024
@@ -185,29 +185,29 @@ void gather_directory_elts_and_size(DIR* dir, size_t* elts, size_t* size) {
 	getcwd(buf, PATH_MAX);
 	printf("scanning dir %s\n", buf); 
 	struct dirent* cur_dir = readdir(dir);
-	while(cur_dir != NULL) {
-		if( strcmp(cur_dir->d_name, ".") == 0 ||
-			strcmp(cur_dir->d_name, "..") == 0) {
-		} else {
-			if(cur_dir->d_type == DT_DIR) {
-				DIR* newdir = opendir(cur_dir->d_name);
-				SC(chdir(cur_dir->d_name));	
-				if(newdir != NULL) {
-					gather_directory_elts_and_size(newdir, elts, size);	
-					closedir(newdir);
-				}
+	struct stat info;
+	if(stat(cur_dir->d_name, &info) == 0) {
+		while(cur_dir != NULL) {
+			if (strcmp(cur_dir->d_name, ".") == 0 ||
+				strcmp(cur_dir->d_name, "..") == 0) {
+				//nothing	
 			} else {
-				struct stat info;
-				if(stat(cur_dir->d_name, &info) == 0) {
-
-					(*elts) += 1;
-					(*size) += info.st_size;	
+				if(S_ISDIR(info.st_mode)) {
+					DIR* newdir = opendir(cur_dir->d_name);
+					SC(chdir(cur_dir->d_name));
+					if(newdir != NULL) {
+						gather_directory_elts_and_size(newdir, elts, size);
+						closedir(newdir);
+					}
 				} else {
-					perror("Stat failure");
+					(*elts)++;
+					(*size) += info.st_size;
 				}
 			}
+			cur_dir = readdir(dir);
 		}
-		cur_dir = readdir(dir);
+	} else {
+		perror("Could not open directory");
 	}
 	SC(chdir(".."));
 
@@ -436,7 +436,7 @@ void remove_from_active_clients(struct client_info_s* client) {
 
 	server.clients_connected --;
 	pthread_mutex_unlock(&server_info_mutex);
-};
+}
 
 void close_everyone() {
 	struct client_info_s* client = server.clients;

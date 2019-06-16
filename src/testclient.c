@@ -24,7 +24,7 @@ char* datas[TEST_1_NUM_ROUNDS];
 size_t lengths[TEST_1_NUM_ROUNDS];
 
 void init_tests();
-void end_tests();
+void end_tests(char* name, size_t test_type);
 void str_repeat(char* buf, char* orig, size_t len, size_t newlen);
 
 void test_1();
@@ -61,7 +61,7 @@ int main(int argc, char** argv) {
 			break;
 	}
 	ASSERT(os_disconnect() == OS_OK);
-	end_tests();
+	end_tests(name, test);
 	return EXIT_SUCCESS;
 }
 
@@ -87,13 +87,13 @@ void init_tests() {
 	}
 }
 
-void end_tests() {
+void end_tests(char* name, size_t type) {
 	for(size_t i = 0; i < TEST_1_NUM_ROUNDS; i ++) {
 		free(names[i]);
 		free(datas[i]);
 	}
 
-	printf("[TEST REPORTS] Passed %lu/%lu\n", num_passed, num_assertions);
+	printf("[TEST REPORTS] Client %s passed  %lu/%lu tests of type %lu\n", name, num_passed, num_assertions, type);
 }
 
 void str_repeat(char* buf, char* orig,  size_t len, size_t newlen) {
@@ -102,7 +102,6 @@ void str_repeat(char* buf, char* orig,  size_t len, size_t newlen) {
 	}	
 	buf[newlen] = '\0';
 }
-
 void test_1() {
 	for(size_t i = 0; i < TEST_1_NUM_ROUNDS; i ++) {	
 		ASSERT(os_store(names[i], datas[i], lengths[i]) == OS_OK);
