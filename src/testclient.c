@@ -7,7 +7,7 @@
 
 #define EXITTHESHIP(msg) { fprintf(stderr, msg); exit(EXIT_FAILURE); }
 #define ASSERT(expr) num_assertions ++; if(!(expr)) { fprintf(stderr, "[FAIL] " #expr "\n"); num_failed ++; }	\
-						else { printf("[OK] "#expr "\n"); num_passed ++;} \
+						else { fprintf(stderr, "[OK] "#expr "\n"); num_passed ++;} \
 
 #define ASSERT_IF(c, e) num_assertions ++;\
 						if(c) {num_passed ++; ASSERT(e)} else {num_failed ++;} \

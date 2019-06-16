@@ -256,6 +256,7 @@ void* thread_worker(void* args) {
 }
 
 int check_client_name_unique(char* name) {
+	pthread_mutex_lock(&server_info_mutex);	
 	struct client_info_s* current_client = server.clients;
 	while(current_client != NULL) {
 		if(strcmp(name, current_client->client_name) == 0) {
@@ -263,6 +264,7 @@ int check_client_name_unique(char* name) {
 		}
 		current_client = current_client->next;
 	}
+	pthread_mutex_unlock(&server_info_mutex);
 	return OS_OK;
 }
 
@@ -279,7 +281,7 @@ int handle_cmd(char* msg, struct client_info_s* client) {
 					return send_ko(client->client_fd, "REGISTER: No name provided");;
 				}
 
-				if(check_client_name_unique(name) < 0) {
+				if(!check_client_name_unique(name)) {
 					printf("[Object Store] Client %d is already registered on the server with the name %s\n", client->client_fd, name);
 					return send_ko(client->client_fd, "REGISTER: Client is already registered on the server");
 				}
