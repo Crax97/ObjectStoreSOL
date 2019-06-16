@@ -66,6 +66,7 @@ int delete_data(struct client_info_s *client, char* data_name);
 int disconnect_client(struct client_info_s *client);
 
 int main(int argc, char** argv) {
+	unlink (SOCKNAME); // Just in case
 	struct sockaddr_un sock;	
 	sock.sun_family = AF_UNIX;
 	strcpy(sock.sun_path, SOCKNAME);			
@@ -192,10 +193,13 @@ void gather_directory_elts_and_size(DIR* dir, size_t* elts, size_t* size) {
 				strcmp(cur_dir->d_name, "..") == 0) {
 				//nothing	
 			} else {
-				if(S_ISDIR(info.st_mode)) {
+				struct stat cur_scanned_info;
+				char cur_el[PATH_MAX];
+				sprintf(cur_el, "%s/%s", buf, cur_dir->d_name);
+				if( stat(cur_el, &cur_scanned_info) == 0 && S_ISDIR(cur_scanned_info.st_mode)) {
 					DIR* newdir = opendir(cur_dir->d_name);
-					SC(chdir(cur_dir->d_name));
 					if(newdir != NULL) {
+						SC(chdir(cur_dir->d_name));
 						gather_directory_elts_and_size(newdir, elts, size);
 						closedir(newdir);
 					}
