@@ -62,9 +62,14 @@ int writen (int fd, const char* buf, size_t buflen) {
 	if(buf != NULL) {
 		size_t total_written = 0;
 		while(total_written < buflen) {
+			errno = 0;
 			int written_now = write(fd, buf + total_written, buflen - total_written);
 			if(written_now > 0) {
 				total_written += written_now;
+			} else {
+				if (errno == EPIPE) {
+					printf("PIPE\n");
+				}
 			}
 		}
 		return total_written;

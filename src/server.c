@@ -302,7 +302,9 @@ int handle_cmd(char* msg, struct client_info_s* client) {
 				if(data == NULL) {
 					return send_ko(client->client_fd, "STORE: No data sent");
 				}
-				store_data(client, data_name, data_len, data);
+				if(!store_data(client, data_name, data_len, data)) {
+					fprintf(stderr, "[Object Store] Failed storing data for %s\n", client->client_name);
+				}
 				free(data);
 				return send_ok(client->client_fd);
 			} else if(strcmp(cmd, "RETRIEVE") == 0) {
@@ -310,7 +312,7 @@ int handle_cmd(char* msg, struct client_info_s* client) {
 				if (data_name == NULL) {
 					return send_ko(client->client_fd, "Client didn't send the name of the object");
 				}
-				if (retrieve_data(client, data_name) != 0) {
+				if (!retrieve_data(client, data_name)) {
 					return send_ko(client->client_fd, "Client doesn't have that object");
 				}
 			} else if(strcmp(cmd, "DELETE") == 0) {
@@ -318,7 +320,7 @@ int handle_cmd(char* msg, struct client_info_s* client) {
 				if(data_name == NULL) {
 					return send_ko(client->client_fd, "Client didn't send the name of the object to delete");
 				}
-				if(delete_data(client, data_name) != 0) {
+				if(!delete_data(client, data_name)) {
 					return send_ko(client->client_fd, "Client doesn't have that object");
 				} else {
 					return send_ok(client->client_fd);
@@ -344,7 +346,7 @@ int register_client(struct client_info_s *client) {
 		mkdir(path, DEFAULT_MASK);
 	}
 	client->has_registered = 1;
-	return 1;
+	return OS_OK;
 }
 
 int store_data(struct client_info_s *client, char* data_name, size_t data_len, char* data) {
@@ -354,7 +356,7 @@ int store_data(struct client_info_s *client, char* data_name, size_t data_len, c
 	FILE* file = fopen(path, "w");
 	if(file == NULL) {
 		perror("Error opening file");
-		return -1;
+		return OS_ERR;
 	}
 
 	size_t written = 0;
@@ -363,14 +365,19 @@ int store_data(struct client_info_s *client, char* data_name, size_t data_len, c
 		written += now;
 	}
 	fclose(file);
-	return 0;
+	return OS_OK;
 }
 
 int delete_data(struct client_info_s *client, char* data_name) {
 	char path[PATH_MAX];
 	sprintf(path, "%s/%s/%s", "data", client->client_name, data_name);
 
-	return unlink(path);
+	struct stat info;
+	if(stat(path, &info) == 0) {
+		return unlink(path);
+	} else {
+		return OS_ERR;
+	}
 }
 
 int retrieve_data(struct client_info_s *client, char* data_name) {
@@ -389,22 +396,21 @@ int retrieve_data(struct client_info_s *client, char* data_name) {
 			size_t now = fread(data, sizeof(char), len, file);
 			len -= now;
 		}
-		char fmt[] = "DATA %lu \n ";
 		char data_header[30];
-		sprintf(data_header, fmt, info.st_size);
+		sprintf(data_header, DATA_STR, (unsigned long)info.st_size);
 		if(writen(client->client_fd, data_header, strlen(data_header)) < 0) {
-			return -1;
+			return OS_ERR;
 		}	
 	
 		if(writen(client->client_fd, data, info.st_size) < 0) {
-			return -1;
+			return OS_ERR;
 		}
 		free(data);
-		return 0;
+		return OS_OK;
 	} else {
-		perror("[ Object Store ] RETRIEVE could not open the file");
+		perror("[Object Store] RETRIEVE could not open the file");
 	}
-	return -1;
+	return OS_ERR;
 }
 
 void remove_from_active_clients(struct client_info_s* client) {
@@ -445,6 +451,7 @@ int disconnect_client(struct client_info_s *client) {
 }
 
 int send_ko(int fd, const char* msg) {
+	printf("[Object Store] KO to %d: %s\n", fd, msg);
 	char buf[BUF_SIZE];
 	sprintf(buf, "KO %s \n", msg);
 	return writen(fd, buf, strlen(buf));

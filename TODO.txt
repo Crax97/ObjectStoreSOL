@@ -1,7 +1,7 @@
-1) Ensure that clients are unique
-2) Better error management
-3) Refactor handle_cmd to be more readable
-4) Refactor handler methods to be more readable
-5) Organize code bettert
-6) Write better tests
-7) Write relation
+-  Uniform error signaling
+-  Better error management
+-  Refactor handle_cmd to be more readable
+-  Refactor handler methods to be more readable
+-  Organize code bettert
+-  Write better tests
+-  Write relation
