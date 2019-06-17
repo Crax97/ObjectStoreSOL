@@ -7,5 +7,6 @@ libs
 data/*
 data
 
+*.log
 *.a
 cliend_cmdline.o
