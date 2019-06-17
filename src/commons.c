@@ -21,34 +21,38 @@ void realloc_and_append(char** line, int *curpos, char* buf, int off) {
 }
 
 ssize_t read_to_newline(int fd, char** line) {
-	*line = NULL;
+	*line = (char*) calloc(100 + 1, sizeof(char));
 
 	char chunk[CHUNK_SIZE + 1];
 	char c = 'a';	
 
 	int chunk_pos = 0, msg_pos = 0;
 	while (c != '\n' ) {
-		errno = 0;
 		int rn = read(fd, &c, 1); 
 		if( rn < 0) {
 			if (errno == EINTR) {
 				continue;
 			} else {
 				if (*line) free (*line);
+				(*line) = NULL;
+				perror("read_to_newline");
 				return -1;
 			}
 		} else if( rn == 0 ) {
-			realloc_and_append(line, &msg_pos, chunk, chunk_pos);
+			//realloc_and_append(line, &msg_pos, chunk, chunk_pos);
 			return msg_pos + chunk_pos - 1;;	
 		} else {
 			chunk[chunk_pos] = c;
 			chunk_pos ++;
 			if(c == '\n' || chunk_pos == CHUNK_SIZE) {
-				realloc_and_append(line, &msg_pos, chunk, chunk_pos);
+				//realloc_and_append(line, &msg_pos, chunk, chunk_pos);
+				memcpy( (*line) + msg_pos, chunk, chunk_pos);
+				msg_pos += chunk_pos;
 				chunk_pos = 0;
 			}
 		}
 	}
+	(*line)[msg_pos] = '\0';
 	return msg_pos;
 }
 
@@ -90,6 +94,7 @@ ssize_t writen (int fd, const char* buf, size_t len) {
 			if(errno == EINTR) {
 				now = 0;
 			} else {
+				perror("writen");
 				return -1;
 			}
 		} else if (now == 0) {
@@ -118,18 +123,21 @@ int read_from_disk(char* path, char** buf) {
 	if (file != NULL) {
 		struct stat info;
 		if(stat(path, &info) != 0) {
+			perror("stat in read_from_disk failed");
 			return OS_ERR;
 		}
 	
-		size_t len = info.st_size;
+		size_t len = info.st_size, read = 0;;
 		*buf = (char*) calloc(len, sizeof(char));	
 
-		while(len > 0) {
-			size_t now = fread(*buf, sizeof(char), len, file);
-			len -= now;
+		while(read < len) {
+			size_t now = fread((*buf) + read, sizeof(char), len - read, file);
+			read += now;
 		}
-		return info.st_size - len;
+		fclose(file);
+		return read;
 	} 
+	perror("Failed opening file");
 return OS_ERR;
 }
 
