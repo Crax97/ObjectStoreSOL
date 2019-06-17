@@ -145,6 +145,7 @@ void* worker_cycle(void* args) {
 				break;
 			}
 			handle_msg(incoming_msg, my_info, server);
+            free(incoming_msg);
 		}
 	}
 

@@ -28,7 +28,7 @@ struct server_info_s;
 #define STORE_STR "STORE %s %lu \n "
 #define OK_STR "OK \n"
 #define RETRIEVE_STR "RETRIEVE %s \n"
-#define DATA_STR "DATA %llu \n "
+#define DATA_STR "DATA %lld \n "
 #define DELETE_STR "DELETE %s \n"
 #define LEAVE_STR "LEAVE \n"
 
