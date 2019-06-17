@@ -5,8 +5,8 @@ CC = gcc
 
 all: server libobjstore
 
-server: commons commands worker
-	$(CC) $(CFLAGS) $(DIRECTORY)/$@.c $<.o commands.o worker.o -o $@.o -lpthread
+server: commons commands worker signal
+	$(CC) $(CFLAGS) $(DIRECTORY)/$@.c $<.o commands.o worker.o signal.o -o $@.o -lpthread
 test: testclient
 	-rm testout.log
 	touch testout.log
@@ -30,6 +30,9 @@ commands:
 	$(CC) -c $(CFLAGS) $(DIRECTORY)/$@.c -o $@.o
 
 worker:
+	$(CC) -c $(CFLAGS) $(DIRECTORY)/$@.c -o $@.o
+
+signal:
 	$(CC) -c $(CFLAGS) $(DIRECTORY)/$@.c -o $@.o
 
 clean:

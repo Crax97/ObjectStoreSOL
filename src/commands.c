@@ -1,12 +1,13 @@
 #include "commands.h"
 #include "worker.h"
 #include "commons.h"
+#include "server.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
 
-int handle_register(char* name, struct worker_s* worker) {
+int handle_register(char* name, struct worker_s* worker, struct server_info_s*  info) {
 	if(worker == NULL) {
 		CATASTROPHIC_FAILURE("Worker is NULL in REGISTER!!!!");
 	}
@@ -21,7 +22,7 @@ int handle_register(char* name, struct worker_s* worker) {
 	if(!is_worker_name_unique(name)) {
 		return ko("REGISTER: Requested name is not unique", worker);;
 	}
-	accept_worker(name, worker);	
+	accept_worker(name, worker, info);	
 	return ok(worker);
 }
 
@@ -104,12 +105,12 @@ int handle_delete(char* data_name, struct worker_s* worker) {
 	return ok(worker);
 }
 
-int handle_leave(struct worker_s* worker) {
+int handle_leave(struct worker_s* worker, struct server_info_s* server) {
 	if (worker == NULL) {
 		CATASTROPHIC_FAILURE("Worker is NULL in LEAVE!");
 	}
 
-	stop_worker(worker);
+	stop_worker(worker, server);
 	return OS_TRUE;
 }
 

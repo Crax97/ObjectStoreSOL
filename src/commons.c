@@ -1,4 +1,5 @@
 #include "commons.h"
+#include "server.h"
 
 #include <stdlib.h>
 #include <unistd.h>
@@ -6,6 +7,8 @@
 #include <errno.h>
 #include <memory.h>
 #include <sys/stat.h>
+#include <limits.h>
+#include <dirent.h>
 
 #define CHUNK_SIZE 1024 
 
@@ -145,4 +148,55 @@ int write_to_disk(char* path, char* buf, ssize_t len) {
 	fclose(file);
 	return written;
 }
+void gather_directory_elts_and_size(DIR* dir, size_t* elts, size_t* size) {
+	char buf[PATH_MAX];
+	getcwd(buf, PATH_MAX);
+	printf("scanning dir %s\n", buf); 
+	struct dirent* cur_dir = readdir(dir);
+	struct stat info;
+	if(stat(cur_dir->d_name, &info) == 0) {
+		while(cur_dir != NULL) {
+			if (strcmp(cur_dir->d_name, ".") == 0 ||
+				strcmp(cur_dir->d_name, "..") == 0) {
+				//nothing	
+			} else {
+				struct stat cur_scanned_info;
+				char cur_el[PATH_MAX];
+				sprintf(cur_el, "%s/%s", buf, cur_dir->d_name);
+				if( stat(cur_el, &cur_scanned_info) == 0 && S_ISDIR(cur_scanned_info.st_mode)) {
+					DIR* newdir = opendir(cur_dir->d_name);
+					if(newdir != NULL) {
+						SC(chdir(cur_dir->d_name));
+						gather_directory_elts_and_size(newdir, elts, size);
+						closedir(newdir);
+					}
+				} else {
+					(*elts)++;
+					(*size) += info.st_size;
+				}
+			}
+			cur_dir = readdir(dir);
+		}
+	} else {
+		perror("Could not open directory");
+	}
+	SC(chdir(".."));
 
+}	
+
+void server_print_info(const struct server_info_s* info) {
+	printf("[Object Store] Server infos:\n");
+	size_t total_dim = 0, total_count = 0;
+	DIR* data_dir = opendir("data");
+	if(data_dir != NULL) {
+		chdir("data");
+		gather_directory_elts_and_size(data_dir, &total_count, &total_dim);
+		closedir(data_dir);
+		printf("[Object Store] Clients connected: %lu\n", info->active_clients);
+		printf("[Object Store] Total size: %lu\n", total_dim);
+		printf("[Object Store] Total elements: %lu\n", total_count);	
+	} else {
+		fprintf(stderr, "[Object Store] could not open the data directory!");
+		exit(EXIT_FAILURE);
+	}
+}

@@ -1,6 +1,7 @@
 #include "worker.h"
 #include "commons.h"
 #include "commands.h"
+#include "server.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -10,11 +11,15 @@
 #include <unistd.h>
 #include <limits.h>
 
+
 pthread_mutex_t list_mutex = PTHREAD_MUTEX_INITIALIZER;
 worker_list active_workers;
 
-struct worker_s* create_worker(int file_descriptor) {
+struct worker_s* create_worker(int file_descriptor, struct server_info_s *server) {
+	struct container_s* container = (struct container_s*) malloc(sizeof(struct container_s));
 	struct worker_s* worker = (struct worker_s*) malloc(sizeof(struct worker_s));
+	container->server = server;
+	container->worker = worker;
 	worker->worker_fd = file_descriptor;
 	worker->next = NULL;
 	worker->prev = NULL;
@@ -22,12 +27,12 @@ struct worker_s* create_worker(int file_descriptor) {
 	worker->is_registered = OS_FALSE;
 	memset(worker->associated_name, 0, MAX_CLIENT_NAME_LEN + 1);
 	pthread_t worker_thread;
-	SC(pthread_create(&worker_thread, NULL, worker_cycle, worker)); 
+	SC(pthread_create(&worker_thread, NULL, worker_cycle, container)); 
 	SC(pthread_detach(worker_thread));
 	return worker;
 }
 
-int handle_msg(char* msg, struct worker_s* worker) {
+int handle_msg(char* msg, struct worker_s* worker, struct server_info_s* info) {
 	if(msg == NULL) {
 		return OS_FALSE;
 	}
@@ -39,7 +44,7 @@ int handle_msg(char* msg, struct worker_s* worker) {
 
 	if(strcmp(command, "REGISTER") == 0) {
 		char* requested_name = strtok_r(NULL, " \n", &last);
-		return handle_register(requested_name, worker);
+		return handle_register(requested_name, worker, info);
 	} else if(strcmp(command, "STORE") == 0) {
 		char* data_name = strtok_r(NULL, " \n", &last);
 		char* data_length_str = strtok_r(NULL, " \n", &last);
@@ -51,7 +56,7 @@ int handle_msg(char* msg, struct worker_s* worker) {
 		char* data_name = strtok_r(NULL, " \n", &last);
 		return handle_delete(data_name, worker);
 	} else if(strcmp(command, "LEAVE") == 0) {
-		return handle_leave(worker);
+		return handle_leave(worker, info);
 	} else {
 		return ko("Unrecognised command!", worker);
 	}
@@ -100,44 +105,53 @@ int is_worker_name_unique(const char* name) {
 	return is_unique;
 }
 
-void accept_worker(const char* name, struct worker_s* worker) {
+void accept_worker(const char* name, struct worker_s* worker, struct server_info_s* server) {
 	pthread_mutex_lock(&list_mutex);
 	strcpy(worker->associated_name, name);
 	worker->is_registered = OS_TRUE;
-	
+	server->active_clients ++;
+
 	char path[PATH_MAX];
 	sprintf(path, "%s/%s", DATA_FOLDER, name);
 	SC(create_folder(path));
 	pthread_mutex_unlock(&list_mutex);
 }
 
-void stop_worker(struct worker_s* worker) {
+void stop_worker(struct worker_s* worker, struct server_info_s *server) {
 	pthread_mutex_lock(&list_mutex);
 	worker->is_active = OS_FALSE;
 	worker->is_registered = OS_FALSE;
+	server->active_clients --;
+
 	pthread_mutex_unlock(&list_mutex);
 }
 
 void* worker_cycle(void* args) {
-	struct worker_s* my_info = (struct worker_s*) args;
+	struct container_s* container = (struct container_s*) args;
+
+	struct worker_s* my_info = container->worker;
+	struct server_info_s* server = container->server;
 	struct pollfd fd;
 	fd.fd = my_info->worker_fd;
 	fd.events = POLLIN;
-	if(poll(&fd, 1, 10) > 0) {
-		while(my_info->is_active) {
+
+	while(server->server_running && my_info->is_active) {
+		if(poll(&fd, 1, 10) > 0) {
 			char* incoming_msg = NULL;
 			int result = read_to_newline(my_info->worker_fd, &incoming_msg);
 			if(result < 0) {
 				fprintf(stderr, OS "Client %s (fd %d) quit\n", my_info->associated_name, my_info->worker_fd);
 				my_info->is_active = 0;
+				break;
 			}
-			handle_msg(incoming_msg, my_info);
+			handle_msg(incoming_msg, my_info, server);
 		}
 	}
 
 	remove_worker_list(my_info);	
 	SC(close(my_info->worker_fd));
 	free(my_info);
+	free(container);
 	
 	pthread_exit(NULL);
 }

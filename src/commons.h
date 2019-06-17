@@ -3,6 +3,8 @@
 
 #include <stdio.h>
 
+struct server_info_s;
+
 #define WORKING_DIR_NAME "data"
 #define SOCKNAME "objstore.sock"
 #define BACKLOG 1000
@@ -38,5 +40,7 @@ int create_folder(char* path);
 int read_from_disk(char* path, char** buf);
 int write_to_disk(char* path, char* buf, ssize_t len);
 int delete_file(char* path);
+
+void server_print_info(const struct server_info_s* info);
 
 #endif
