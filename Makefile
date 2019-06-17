@@ -5,24 +5,15 @@ CC = gcc
 
 all: server libobjstore
 
-server: commons
-	$(CC) $(CFLAGS) $(DIRECTORY)/$@.c $<.o -o $@.o -lpthread
+server: commons commands worker
+	$(CC) $(CFLAGS) $(DIRECTORY)/$@.c $<.o commands.o worker.o -o $@.o -lpthread
 test: testclient
 	-rm testout.log
 	touch testout.log
-	for ((i=1; i<=50; i++)); do \
-		./testclient.o client$$i 1 2>/dev/null 1>>testout.log & \
-	done
-	echo Waiting for test 1 to end
+	seq 1 50 | xargs -n1 -P50 -I{} ./testclient.o client{} 1 1>>testout.log
+	(seq 1 30 | xargs -n1 -P30 -I{} ./testclient.o client{} 2 1>>testout.log) & 
+	(seq 31 50 | xargs -n1 -P20 -I{} ./testclient.o client{} 3 1>>testout.log) &
 	wait
-	for((i=1; i<=30; i++)); do \
-		./testclient.o client$$i 2 2>/dev/null 1>>testout.log & \
-	done
-	for ((i=31; i<=50; i++)); do \
-		./testclient.o client$$i 3 2>/dev/null 1>>testout.log & \
-	done
-	wait
-	echo Waiting for test 2 and 3 to complete
 
 testclient: libobjstore 
 	$(CC) $(CFLAGS) $(DIRECTORY)/$@.c -Llibs/ -lobjstore -o $@.o
@@ -33,6 +24,12 @@ libobjstore: commons
 	ar rvs libs/$@.so $@.o $<.o
 
 commons: 
+	$(CC) -c $(CFLAGS) $(DIRECTORY)/$@.c -o $@.o
+
+commands:
+	$(CC) -c $(CFLAGS) $(DIRECTORY)/$@.c -o $@.o
+
+worker:
 	$(CC) -c $(CFLAGS) $(DIRECTORY)/$@.c -o $@.o
 
 clean:

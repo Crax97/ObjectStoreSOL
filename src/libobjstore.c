@@ -35,7 +35,11 @@ int os_connect(char* name) {
 
 		SC(writen(client_sock, buf, msglen));
 
-		char* response = read_to_newline(client_sock);
+		char* response = NULL;
+	   	if(read_to_newline(client_sock, &response) < 0) {
+			free(response);
+			return OS_ERR;
+		}
 
 		if(strcmp(response, OK_STR) == 0) {
 			return OS_OK;	
@@ -61,11 +65,16 @@ int os_store(char* name, void* block, size_t len) {
 		SC(writen(client_sock, buf, msglen));
 		SC(writen(client_sock, (char*)block, len));
 
-		char* msg = read_to_newline(client_sock);
+		char* msg = NULL;
+		if( read_to_newline(client_sock, &msg) < 0) {
+			free(msg);
+			return OS_ERR;
+		}
 
 		if(strcmp(msg, OK_STR) != 0) {
 			const char* ko_msg = get_ko_msg (msg);
 			fprintf(stderr, ERR_MSG_FORMAT, ko_msg); 
+			free(msg);
 			return OS_ERR;
 		}
 		free(msg);
@@ -84,11 +93,18 @@ void* os_retrieve(char* name) {
 		size_t msglen = strlen(buf);
 		SC(writen(client_sock, buf, msglen));
 		
-		char* msg = read_to_newline(client_sock);
+		char* msg = NULL;
+	   	if(read_to_newline(client_sock, &msg) < 0) {
+			return OS_ERR;
+		}
 
-		size_t datalen = 0;
+		long long datalen = 0;
 		if (sscanf(msg, DATA_STR, &datalen) > 0) {
-			data = read_data(client_sock, datalen);
+			data = (char*) calloc(datalen + 1, sizeof(char));
+			if (read_data(client_sock, data, datalen) < datalen) {
+				free(data);
+				return OS_ERR;
+			}
 		} else {
 			const char* ko_msg = get_ko_msg(msg);
 			fprintf(stderr, ERR_MSG_FORMAT, ko_msg);
@@ -109,7 +125,12 @@ int os_delete(char* name) {
 		size_t msglen = strlen(buf);
 		SC(writen(client_sock, buf, msglen));
 	
-		char* msg = read_to_newline(client_sock);
+		char* msg = NULL;
+		if(read_to_newline(client_sock, &msg) < 0) {
+			free(msg);
+			return OS_ERR;
+		}
+
 		if(strcmp(msg, OK_STR) == 0) {
 			free(msg);
 			return OS_OK;
@@ -129,8 +150,9 @@ int os_disconnect() {
 	const char* LEAVE_MSG = LEAVE_STR;
 	size_t msglen = strlen(LEAVE_MSG);
 	SC(writen(client_sock, LEAVE_MSG, msglen));
-	char* msg = read_to_newline(client_sock); 
-	free(msg);
+	char* msg = NULL;
+	read_to_newline(client_sock, &msg); 
+	if(msg != NULL) free(msg);
 	close(client_sock);
 	client_sock = 0;
 	return OS_OK;
