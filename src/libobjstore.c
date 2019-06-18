@@ -32,9 +32,11 @@ int os_connect(char* name) {
 
 		char buf[MAX_LINE_LENGTH + 1];
 		sprintf(buf, REGISTER_STR, name);
-		size_t msglen = strlen(buf);
+		ssize_t msglen = strlen(buf);
 
-		SC(writen(client_sock, buf, msglen));
+		if(writen(client_sock, buf, msglen) < msglen) {
+			return OS_ERR;
+		}
 
 		char* response = NULL;
 	   	if(read_to_newline(client_sock, &response) < 0) {
@@ -61,10 +63,14 @@ int os_store(char* name, void* block, size_t len) {
 	
 		char buf[MAX_LINE_LENGTH + 1];
 		sprintf(buf, STORE_STR, name, len);
-		size_t msglen = strlen(buf);
+		ssize_t msglen = strlen(buf);
 
-		SC(writen(client_sock, buf, msglen));
-		SC(writen(client_sock, (char*)block, len));
+		if (writen(client_sock, buf, msglen) < msglen) {
+			return OS_ERR;
+		};
+		if (writen(client_sock, (char*)block, len) < (ssize_t) len) {
+			return OS_ERR;
+		}
 
 		char* msg = NULL;
 		if( read_to_newline(client_sock, &msg) < 0) {
@@ -91,8 +97,10 @@ void* os_retrieve(char* name) {
 	if (name != NULL) {
 		char buf[MAX_LINE_LENGTH];
 		sprintf(buf, RETRIEVE_STR, name);
-		size_t msglen = strlen(buf);
-		SC(writen(client_sock, buf, msglen));
+		ssize_t msglen = strlen(buf);
+		if(writen(client_sock, buf, msglen) < msglen) {
+			return OS_ERR;
+		}
 		
 		char* msg = NULL;
 	   	if(read_to_newline(client_sock, &msg) < 0) {
@@ -123,8 +131,10 @@ int os_delete(char* name) {
 	if(name != NULL) {
 		char buf[MAX_LINE_LENGTH + 1];
 		sprintf(buf, DELETE_STR, name);
-		size_t msglen = strlen(buf);
-		SC(writen(client_sock, buf, msglen));
+		ssize_t msglen = strlen(buf);
+		if (writen(client_sock, buf, msglen) < msglen) {
+			return OS_ERR;
+		}
 	
 		char* msg = NULL;
 		if(read_to_newline(client_sock, &msg) < 0) {
@@ -149,8 +159,8 @@ int os_disconnect() {
 		return OS_NOCONN;
 	}
 	const char* LEAVE_MSG = LEAVE_STR;
-	size_t msglen = strlen(LEAVE_MSG);
-	SC(writen(client_sock, LEAVE_MSG, msglen));
+	ssize_t msglen = strlen(LEAVE_MSG);
+	writen(client_sock, LEAVE_MSG, msglen); // As from the specification, os_disconnect() must always be successful. Ignorning eventual erros
 	char* msg = NULL;
 	read_to_newline(client_sock, &msg); 
 	if(msg != NULL) free(msg);
