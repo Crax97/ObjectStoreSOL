@@ -11,3 +11,5 @@ echo "Tests failed: $FAILED_COUNT_1"
 echo "Type 1 tests: $TYPE1_COUNT"
 echo "Type 2 tests: $TYPE2_COUNT"
 echo "Type 3 tests: $TYPE3_COUNT"
+
+kill -SIGUSR1 $(pidof server.o)

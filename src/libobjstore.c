@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/types.h>
+#include <signal.h>
 
 #define ERR_MSG_FORMAT "[Object Store] Err: %s\n"
 

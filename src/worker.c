@@ -141,7 +141,7 @@ void* worker_cycle(void* args) {
 			int result = read_to_newline(my_info->worker_fd, &incoming_msg);
 			if(result < 0) {
 				fprintf(stderr, OS "Client %s (fd %d) quit\n", my_info->associated_name, my_info->worker_fd);
-				my_info->is_active = 0;
+				stop_worker(my_info, server);
 				break;
 			}
 			handle_msg(incoming_msg, my_info, server);

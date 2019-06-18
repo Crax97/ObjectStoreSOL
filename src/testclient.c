@@ -5,12 +5,15 @@
 #include "commons.h"
 #include "libobjstore.h"
 
-#define EXITTHESHIP(msg) { fprintf(stderr, msg); exit(EXIT_FAILURE); }
-#define ASSERT(expr) num_assertions ++; if(!(expr)) { printf("[FAIL] " #expr "\n"); exit(EXIT_FAILURE); num_failed ++; }	\
-						else { num_passed ++;} \
+#define ASSERT(expr) 													\
+	if (!(expr)) { 														\
+		fprintf(stderr, "[FAIL] %s failed test type %lu\n", name, test);\
+		exit(EXIT_FAILURE); 											\
+	} 																	\
 
-#define ASSERT_IF(c, e) num_assertions ++;\
-						if(c) {num_passed ++; ASSERT(e)} else {num_failed ++;} \
+#define ASSERT_IF(c, e) 	\
+	ASSERT(c) 				\
+	ASSERT(e) 				\
 
 #define TEST_1_INITIAL_SIZE 100
 #define TEST_1_FINAL_SIZE 100000
@@ -27,16 +30,18 @@ void init_tests();
 void end_tests(char* name, size_t test_type);
 void str_repeat(char* buf, char* orig, size_t len, size_t newlen);
 
-void test_1();
-void test_2();
-void test_3();
+void print_usage(const char* name);
+
+void test_1(char* name, size_t test);
+void test_2(char* name, size_t test);
+void test_3(char* name, size_t test);
 
 int main(int argc, char** argv) {
 	char *name = NULL;	
 	size_t test = 0;
 
 	if(argc < 2) {
-		fprintf(stderr, "Usage: %s name test\n", argv[0]);
+		print_usage(argv[0]);
 		exit(EXIT_FAILURE);
 	};
 	name = argv[1];
@@ -48,21 +53,27 @@ int main(int argc, char** argv) {
 
 	switch(test) {
 		case 1:
-			test_1();
+			test_1(name, test);
 			break;
 		case 2:
-			test_2();
+			test_2(name, test);
 			break;
 		case 3:
-			test_3();
+			test_3(name, test);
 			break;
 		default:
-			fprintf(stderr, "Test must be 1, 2, or 3\n");
+			print_usage(argv[0]);
+			exit(EXIT_FAILURE);
 			break;
 	}
 	ASSERT(os_disconnect() == OS_OK);
 	end_tests(name, test);
 	return EXIT_SUCCESS;
+}
+
+void print_usage(const char* name) {
+	fprintf(stderr, "usage: %s <clientname> <test>\n", name); 
+	fprintf(stderr, "\twhere test is an integer between 1 and 3\n");
 }
 
 void init_tests() {
@@ -75,7 +86,7 @@ void init_tests() {
 
 	size_t ips_len = strlen(ipsum);
 	for(size_t i = 0; i < TEST_1_NUM_ROUNDS; i ++) {
-		size_t newlen = (i * increment) + TEST_1_INITIAL_SIZE;
+		size_t newlen = ((i+1) * increment) + TEST_1_INITIAL_SIZE;
 		char* data = (char*)calloc(newlen + 1, sizeof(char) );
 		char name[30] = {0};
 		sprintf(name, "Object%lu", i);		
@@ -93,7 +104,7 @@ void end_tests(char* name, size_t type) {
 		free(datas[i]);
 	}
 
-	printf("[TEST REPORTS] Client %s passed  %lu/%lu tests of type %lu\n", name, num_passed, num_assertions, type);
+	printf("[OK] %s passed test type %lu\n", name, type);
 }
 
 void str_repeat(char* buf, char* orig,  size_t len, size_t newlen) {
@@ -102,14 +113,14 @@ void str_repeat(char* buf, char* orig,  size_t len, size_t newlen) {
 	}	
 	buf[newlen] = '\0';
 }
-void test_1() {
+void test_1(char* name, size_t test) {
 	for(size_t i = 0; i < TEST_1_NUM_ROUNDS; i ++) {	
 		ASSERT(os_store(names[i], datas[i], lengths[i]) == OS_OK);
 	}
 	
 }
 
-void test_2() {
+void test_2(char* name, size_t test) {
 	for(size_t i = 0; i < TEST_1_NUM_ROUNDS; i ++) {
 		char* retrieved = (char*)os_retrieve(names[i]);
 		ASSERT_IF(retrieved != NULL, strlen(retrieved) == lengths[i]);
@@ -118,7 +129,7 @@ void test_2() {
 	}
 }
 
-void test_3() {
+void test_3(char* name, size_t test) {
 	for(size_t i = 0; i < TEST_1_NUM_ROUNDS; i ++) {
 		ASSERT(os_delete(names[i]) == OS_OK);
 	}
