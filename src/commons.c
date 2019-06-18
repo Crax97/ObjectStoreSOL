@@ -33,8 +33,6 @@ ssize_t read_to_newline(int fd, char** line) {
 			if (errno == EINTR) {
 				continue;
 			} else {
-				if (*line) free (*line);
-				(*line) = NULL;
 				perror("read_to_newline");
 				return -1;
 			}

@@ -45,6 +45,7 @@ int main(int argc, char** argv) {
 	server.active_clients = 0;
 	server.server_running = OS_TRUE;
 	server.server_fd = socket_fd;
+    
 	pthread_t signal_thread = create_signal_thread(&server);
 
 	while(server.server_running) {

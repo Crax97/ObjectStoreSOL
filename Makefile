@@ -1,6 +1,6 @@
 DIRECTORY=src
 OPTS=-DIGNORE_SIGPIPE
-CFLAGS += -g -std=c99 -pedantic -Wall -Wmissing-field-initializers -D_POSIX_C_SOURCE=200809L
+CFLAGS += -std=c99 -pedantic -Wall -Wmissing-field-initializers -D_POSIX_C_SOURCE=200809L
 CC = gcc
 .PHONY = clean
 
