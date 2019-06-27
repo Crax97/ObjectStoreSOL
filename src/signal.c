@@ -29,7 +29,7 @@ void* signal_worker(void* args) {
 				close(info->server_fd);
 				break;
 			case SIGUSR1:
-				server_print_info(info);	
+				SIGUSR1_SIGNAL_EMITTED = 1;
 				sigaddset(&set, SIGINT);
 				sigaddset(&set, SIGTERM);
 				sigaddset(&set, SIGUSR1);

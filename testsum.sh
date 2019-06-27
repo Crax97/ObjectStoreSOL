@@ -4,7 +4,7 @@ exec 3<testout.log
 PASSED=(0 0 0 0)
 FAILED=(0 0 0 0)
 WHOPASSED=()
-WHOFAIELD=()
+WHOFAILED=()
 while read -u 3 -a line; do
 	TOT=$(($TOT + 1))
 	TEST=$(echo ${line[@]} | cut -d ' ' -f 6)

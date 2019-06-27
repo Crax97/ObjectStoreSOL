@@ -38,9 +38,8 @@ int handle_store(char* data_name, char* data_len, struct worker_s* worker) {
 	char path[PATH_MAX];
 	sprintf(path, "%s/%s/%s", DATA_FOLDER, worker->associated_name, data_name);
 	
-	char *buf = (char*)calloc(len + 1, sizeof(char));
+	char *buf = (char*)calloc(len, sizeof(char));
 	if(read_data(worker->worker_fd, buf, len) < len) {
-        free(buf);
 		return ko("Error reading data from socket!", worker);
 	}
 
@@ -48,7 +47,7 @@ int handle_store(char* data_name, char* data_len, struct worker_s* worker) {
 		free(buf);
 		return ko("Error writing data!", worker);
 	}
-	
+
 	free(buf);
 	return ok(worker);
 }
@@ -108,8 +107,8 @@ int handle_delete(char* data_name, struct worker_s* worker) {
 
 int handle_leave(struct worker_s* worker, struct server_info_s* server) {
 	if (worker == NULL) {
-		CATASTROPHIC_FAILURE("Worker is NULL in LEAVE!");
-	}
+	CATASTROPHIC_FAILURE("Worker is NULL in LEAVE!");
+}
 
 	stop_worker(worker, server);
 	return OS_TRUE;
@@ -133,4 +132,5 @@ int ko(char* msg, struct worker_s *worker) {
 		return OS_FALSE;
 	}
 	return OS_TRUE;
+
 }

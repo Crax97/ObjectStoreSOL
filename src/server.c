@@ -26,6 +26,8 @@
 
 #define DEFAULT_MASK 0777
 
+extern int SIGUSR1_SIGNAL_EMITTED;
+
 pthread_cond_t server_disconnect = PTHREAD_COND_INITIALIZER;
 
 int main(int argc, char** argv) {
@@ -48,15 +50,27 @@ int main(int argc, char** argv) {
     
 	pthread_t signal_thread = create_signal_thread(&server);
 
+	struct pollfd fd;
+	fd.fd = socket_fd;
+	fd.events = POLLIN;
+
 	while(server.server_running) {
-		int client_fd = 0;
-		socklen_t len;
-		client_fd = accept(socket_fd, (struct sockaddr*)&sock, &len);
-		
-		if(client_fd > 0) {
-			printf(OS "Got a new client on fd %d\n", client_fd);
-			struct worker_s* new_worker = create_worker(client_fd, &server);
-			add_worker_list(new_worker);
+
+		if(poll(&fd, 1, 10) >= 1) {
+
+			int client_fd = 0;
+			socklen_t len;
+			client_fd = accept(socket_fd, (struct sockaddr*)&sock, &len);
+			
+			if(client_fd > 0) {
+				printf(OS "Got a new client on fd %d\n", client_fd);
+				struct worker_s* new_worker = create_worker(client_fd, &server);
+				add_worker_list(new_worker);
+			}
+		} else {
+			if(SIGUSR1_SIGNAL_EMITTED == 1) {
+				server_print_info(&server)
+			}
 		}
 	}
 
