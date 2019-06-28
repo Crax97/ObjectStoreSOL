@@ -1,6 +1,6 @@
 DIRECTORY=src
-OPTS=-DIGNORE_SIGPIPE
-CFLAGS += -O3 -std=c99 -pedantic -Wall -Wmissing-field-initializers -D_POSIX_C_SOURCE=200809L
+OPTS= -g
+CFLAGS += $(OPTS) -std=c99 -pedantic -Wall -Wmissing-field-initializers -D_POSIX_C_SOURCE=200809L
 CC = gcc
 .PHONY = clean
 
@@ -20,7 +20,7 @@ testclient: libobjstore
 	$(CC) $(CFLAGS) $(DIRECTORY)/$@.c -Llibs/ -lobjstore -o $@.o
 
 libobjstore: commons 
-	$(CC) $(CFLAGS) $(OPTS) -c $(DIRECTORY)/$@.c -o $@.o
+	$(CC) $(CFLAGS) -c $(DIRECTORY)/$@.c -o $@.o
 	-mkdir libs
 	ar rvs libs/$@.so $@.o $<.o
 

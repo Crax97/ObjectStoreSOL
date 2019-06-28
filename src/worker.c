@@ -40,6 +40,10 @@ int handle_msg(char* msg, struct worker_s* worker, struct server_info_s* info) {
 	char* last = NULL;
 	char* command = strtok_r(msg, " \n", &last);
 
+	if(command == NULL) {
+		return OS_FALSE;
+	}
+
 	printf(OS "Client %s sent %s\n", worker->is_registered ? worker->associated_name : "[No name yet]", command);
 
 	if(strcmp(command, "REGISTER") == 0) {
@@ -139,7 +143,7 @@ void* worker_cycle(void* args) {
 		if(poll(&fd, 1, 10) > 0) {
 			char* incoming_msg = NULL;
 			int result = read_to_newline(my_info->worker_fd, &incoming_msg);
-			if(result < 0) {
+			if(result <= 0) {
 				fprintf(stderr, OS "Client %s (fd %d) quit\n", my_info->associated_name, my_info->worker_fd);
 				stop_worker(my_info, server);
 				break;
