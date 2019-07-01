@@ -38,7 +38,7 @@ int handle_store(char* data_name, char* data_len, struct worker_s* worker) {
 	char path[PATH_MAX];
 	sprintf(path, "%s/%s/%s", DATA_FOLDER, worker->associated_name, data_name);
 	
-	char *buf = (char*)calloc(len, sizeof(char));
+	char *buf = (char*)calloc(len + 1, sizeof(char));
 	if(read_data(worker->worker_fd, buf, len) < len) {
 		return ko("Error reading data from socket!", worker);
 	}
