@@ -1,10 +1,12 @@
-\section{Struttura del progetto}
+	\section{Struttura del progetto}
+	\subsection{Struttura del codice}
 Tutto il codice è contenuto nella cartella \texttt{src}, dove:
 \begin{itemize}
-	\item I file \texttt{commons.c} e \texttt{commons.h} contengono funzioni utili sia all'object store, che alla libreria del client;
+	\item I file \texttt{commons.c} e \texttt{commons.h} contengono funzioni utili sia all'object store, che alla libreria del client, più definizioni di macro e costanti;
 	\item I file \texttt{server.c, worker.c, signal.c} e \texttt{commands.c}, con relativi header, contengono l'implementazione dell'Object Store;
 	\item I file \texttt{libobjstore.c} e \texttt{libobjstore.h} contengono l'implementazione della liberia lato client;
 \end{itemize}
+\subsection{Makefile}
 Il \texttt{Makefile} contiene cinque target:
 \begin{itemize}
 	\item Il target \texttt{all} (di default) compila l'object store, la libreria client e il client di test;
@@ -14,17 +16,28 @@ Il \texttt{Makefile} contiene cinque target:
 	\item Il target \texttt{clean} rimuove tutti i prodotti del processo di compilazione.
 \end{itemize}
 
+\subsection{Script di analisi}
 Infine, lo script \texttt{testsum.sh} elabora il file prodotto dai test, rendendolo più leggibile. Un esempio di tale processo è:
 \begin{Verbatim}
-
-\end
-
+Format: Total   Type1   Type2   Type3
+Passed: 100 50 30 20
+Failed: 0 0 0 0
+by:
+\end{Verbatim}
 \section{Scelte implementative}
-
-Per rispettare le richieste del progetto, si è deciso di usare una lista doppiamente
-concatenata di strutture definite, nel file \texttt{src/worker.h} come
+\subsection{Object Store}
+Come punto centrale del server c'è la seguente struct, definita nel file \texttt{server.h}:
 \begin{Verbatim}
+struct server_info_s {
+        ssize_t active_clients;
+        int server_running;
+        int server_fd;
+};
+\end{Verbatim}
+Il membro \texttt{active\_clients} mantiene il numero di clienti attivi nel server, il membro \texttt{server\_running} è un flag globale che indica ad i vari thread se continuare a lavorare o no, infine, il membro \texttt{server\_fd} contiene il file descriptor associato al socket del server.
 
+Si è deciso di impedire a due client diversi di registrarsi con lo stesso nome. Le informazioni dei singoli client sono salvate in una lista formata dalle seguente struct, definita nel file \texttt{worker.h}: 
+\begin{Verbatim}
 struct worker_s {
 	struct worker_s *next;
 	pthread_t worker_thread;
@@ -34,5 +47,25 @@ struct worker_s {
 	char associated_name[MAX_CLIENT_NAME_LEN + 1];
 	struct worker_s *prev;
 };
+\end{Verbatim}
+Il membro \texttt{associated\_name} contiene il nome associato al thread del client. Ad ogni \texttt{REGISTER} ricevuta dal server, si controlla che il nome inviato nell'header non corrisponda al nome di uno dei worker nella lista dei worker attivi, in tal caso la registrazione viene rifiutata.
+Il membro \texttt{is\_active} viene usato all'interno del \texttt{worker\_loop()} per decidere se continuare a ricevere richieste dal client: Viene settato a 0 quando il client esegue una \texttt{os\_disconnect}.
+Il membro \texttt{is\_registered} serve a controllare se il client ha effettuato una \texttt{os\_register} o no: Se ha valore 0, il client non può eseguire alcuna operazione all'infuori della \texttt{os\_register}, che quindi aggiornerà il valore del membro a 1.
 
-\end{verbatim}
+\subsection{Libreria lato client}
+La libreria lato client espone cinque funzioni:
+\begin{itemize}
+	\item \texttt{os\_connect(char* nome)}, che registra il client nell'Object Store con il \texttt{nome} richiesto, va chiamata prima di tutte le altre funzioni, ed è possibile chiamarla solo una volta durante tutto il periodo di utilizzo dell'Object Store dal parte del client;
+	\item \texttt{os\_store(char* nome, void* data, size\_t len)}, che salva all'interno dell'object store i \texttt{len} bytes puntati da \texttt{data} chiamati \texttt{nome};
+	\item \texttt{os\_retrieve(char* nome)}, che recupera dall'Object Store i dati identificati dal \texttt{nome};
+	\item \texttt{os\_delete(char* nome)}, che rimuove dall'Object Store l'elemento chiamato \texttt{nome};
+	\item \texttt{os\_disconnect()}, che disconnette il client dall'Object Store.
+\end{itemize}
+
+\section{Gestione dei segnali}
+L'Object Store gestisce tre segnali, \texttt{SIGINT, SIGTERM} e \texttt{SIGUSR1}:
+\begin{itemize}
+	\item Sia \texttt{SIGINT} che {SIGTERM} sono gestiti allo stesso modo: Il server inizia le procedure di spegnimento, chiudendo il file descriptor del socket.
+		L'Object Store imposta il valore del membro \texttt{server.server\_running} a 0, comunicando ai thread attualmente attivi di terminare. L'Object Store attende dunque che tutti i thread terminino, prima di uscire dal main.
+	\item Quando l'Object Store riceve il segnale \texttt{SIGUSR1}, stampa il numero di client connessi, il numero di file salvati all'interno dell'Object Store e il peso totale dei dati salvati.
+\end{itemize}
