@@ -8,18 +8,17 @@
 extern int SERVER_RUNNING;
 
 void* signal_worker(void* args) {
-
 	struct server_info_s* info = (struct server_info_s*)args;
 
 	sigset_t set;
 	sigaddset(&set, SIGINT);
 	sigaddset(&set, SIGTERM);
 	sigaddset(&set, SIGUSR1);
-	pthread_sigmask(SIG_UNBLOCK, &set, NULL);
 
 	while (info->server_running) {
+		sigprocmask(SIG_BLOCK, &set, NULL);
 		int sig;
-		sigwait(&set, &sig);
+		SC(sigwait(&set, &sig));
 
 		switch(sig) {
 			case SIGINT:
@@ -29,11 +28,10 @@ void* signal_worker(void* args) {
 				close(info->server_fd);
 				break;
 			case SIGUSR1:
-				SIGUSR1_SIGNAL_EMITTED = 1;
+				server_print_info(info);
 				sigaddset(&set, SIGINT);
 				sigaddset(&set, SIGTERM);
 				sigaddset(&set, SIGUSR1);
-				pthread_sigmask(SIG_UNBLOCK, &set, NULL);
 			break;
 		}
 	}
@@ -42,11 +40,9 @@ void* signal_worker(void* args) {
 }
 
 pthread_t create_signal_thread(struct server_info_s* info) {
-
 	sigset_t set;
-	sigfillset(&set);
-	pthread_sigmask(SIG_BLOCK, &set, NULL);
-
+	sigfillset(&set);	
+	sigprocmask(SIG_BLOCK, &set, NULL);
 	pthread_t thread;
 	SC(pthread_create(&thread, NULL, signal_worker, info));
 	return thread;

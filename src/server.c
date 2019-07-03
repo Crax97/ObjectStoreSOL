@@ -26,8 +26,6 @@
 
 #define DEFAULT_MASK 0777
 
-extern int SIGUSR1_SIGNAL_EMITTED;
-
 pthread_cond_t server_disconnect = PTHREAD_COND_INITIALIZER;
 
 int main(int argc, char** argv) {
@@ -66,10 +64,6 @@ int main(int argc, char** argv) {
 				printf(OS "Got a new client on fd %d\n", client_fd);
 				struct worker_s* new_worker = create_worker(client_fd, &server);
 				add_worker_list(new_worker);
-			}
-		} else {
-			if(SIGUSR1_SIGNAL_EMITTED == 1) {
-				server_print_info(&server);
 			}
 		}
 	}
