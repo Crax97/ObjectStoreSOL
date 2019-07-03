@@ -3,7 +3,7 @@ CFLAGS += $(OPTS) -std=c99 -pedantic -Wall -Wmissing-field-initializers -D_POSIX
 CC = gcc
 .PHONY = clean
 
-all: server libobjstore
+all: server libobjstore testclient
 
 server: src/commons.c src/commands.c src/worker.c src/signal.c
 	$(CC) $(CFLAGS) src/$@.c $? -o $@.o -lpthread

@@ -25,7 +25,6 @@ FAILED[0]=$((FAILED[1] + FAILED[2] + FAILED[3]))
 
 printf "Format: Total\tType1\tType2\tType3\n"
 echo Passed: "${PASSED[@]}"
-echo by: ${WHOPASSED[@]}
 echo Failed: "${FAILED[@]}"
 echo by: ${WHOFAILED[@]}
 
