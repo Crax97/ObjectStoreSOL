@@ -1,4 +1,3 @@
-DIRECTORY=src
 OPTS= -g
 CFLAGS += $(OPTS) -std=c99 -pedantic -Wall -Wmissing-field-initializers -D_POSIX_C_SOURCE=200809L
 CC = gcc
@@ -6,8 +5,9 @@ CC = gcc
 
 all: server libobjstore
 
-server: commons commands worker signal
-	$(CC) $(CFLAGS) $(DIRECTORY)/$@.c $<.o commands.o worker.o signal.o -o $@.o -lpthread
+server: src/commons.c src/commands.c src/worker.c src/signal.c
+	$(CC) $(CFLAGS) src/$@.c $? -o $@.o -lpthread
+
 test: testclient
 	-rm testout.log
 	touch testout.log
@@ -17,25 +17,13 @@ test: testclient
 	wait
 
 testclient: libobjstore 
-	$(CC) $(CFLAGS) $(DIRECTORY)/$@.c -Llibs/ -lobjstore -o $@.o
+	$(CC) $(CFLAGS) src/$@.c -Llibs/ -lobjstore -o $@.o
 
-libobjstore: commons 
-	$(CC) $(CFLAGS) -c $(DIRECTORY)/$@.c -o $@.o
+libobjstore: src/commons.c
+	$(CC) $(CFLAGS) -c src/$@.c $< 
 	-mkdir libs
-	ar rvs libs/$@.so $@.o $<.o
-
-commons: 
-	$(CC) -c $(CFLAGS) $(DIRECTORY)/$@.c -o $@.o
-
-commands:
-	$(CC) -c $(CFLAGS) $(DIRECTORY)/$@.c -o $@.o
-
-worker:
-	$(CC) -c $(CFLAGS) $(DIRECTORY)/$@.c -o $@.o
-
-signal:
-	$(CC) -c $(CFLAGS) $(DIRECTORY)/$@.c -o $@.o
-
+	ar rvs libs/$@.so $@.o commons.o
+	
 clean:
 	-rm *.o
 	-rm libs/*.so
