@@ -157,7 +157,6 @@ int write_to_disk(char* path, char* buf, ssize_t len) {
 void gather_directory_elts_and_size(DIR* dir, size_t* elts, size_t* size) {
 	char buf[PATH_MAX];
 	getcwd(buf, PATH_MAX);
-	printf("scanning dir %s\n", buf); 
 	struct dirent* cur_dir = readdir(dir);
 	struct stat info;
 	if(stat(cur_dir->d_name, &info) == 0) {

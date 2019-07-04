@@ -63,9 +63,9 @@ La libreria lato client espone cinque funzioni:
 \end{itemize}
 
 \section{Gestione dei segnali}
-L'Object Store gestisce tre segnali, \texttt{SIGINT, SIGTERM} e \texttt{SIGUSR1}:
+L'Object Store gestisce tre segnali, \texttt{SIGINT, SIGTERM} e \texttt{SIGUSR1}, dei quali solo i primi due terminano il programma:
 \begin{itemize}
 	\item Sia \texttt{SIGINT} che {SIGTERM} sono gestiti allo stesso modo: Il server inizia le procedure di spegnimento, chiudendo il file descriptor del socket.
 		L'Object Store imposta il valore del membro \texttt{server.server\_running} a 0, comunicando ai thread attualmente attivi di terminare. L'Object Store attende dunque che tutti i thread terminino, prima di uscire dal main.
-	\item Quando l'Object Store riceve il segnale \texttt{SIGUSR1}, stampa il numero di client connessi, il numero di file salvati all'interno dell'Object Store e il peso totale dei dati salvati.
+	\item Quando l'Object Store riceve il segnale \texttt{SIGUSR1}, stampa il numero di client connessi, il numero di file salvati all'interno dell'Object Store e il peso totale dei dati salvati. Il programma prosegue dunque l'esecuzione.
 \end{itemize}
