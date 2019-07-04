@@ -5,6 +5,7 @@ Tutto il codice è contenuto nella cartella \texttt{src}, dove:
 	\item I file \texttt{commons.c} e \texttt{commons.h} contengono funzioni utili sia all'object store, che alla libreria del client, più definizioni di macro e costanti;
 	\item I file \texttt{server.c, worker.c, signal.c} e \texttt{commands.c}, con relativi header, contengono l'implementazione dell'Object Store;
 	\item I file \texttt{libobjstore.c} e \texttt{libobjstore.h} contengono l'implementazione della liberia lato client;
+	\item I file \texttt{testclient.c, badclient.c} e \texttt{simtest.c} contengono dei client testano le varie funzionalità del server. In particolare, \texttt{testclient.c} testa le funzionalità dell'Object Store, mentre i restanti test stressano l'Object Store in vari modi.
 \end{itemize}
 \subsection{Makefile}
 Il \texttt{Makefile} contiene cinque target:
