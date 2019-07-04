@@ -6,7 +6,7 @@
 struct server_info_s;
 
 #define WORKING_DIR_NAME "data"
-#define SOCKNAME "objstore.sock"
+#define SOCKNAME "/tmp/objstore.sock"
 #define BACKLOG 1000
 #define SC(c) if((c) < 0) { perror(#c); exit(-1); }
 #define CATASTROPHIC_FAILURE(msg) {fprintf(stderr, msg); exit(EXIT_FAILURE);}

@@ -5,13 +5,13 @@ Tutto il codice è contenuto nella cartella \texttt{src}, dove:
 	\item I file \texttt{commons.c} e \texttt{commons.h} contengono funzioni utili sia all'object store, che alla libreria del client, più definizioni di macro e costanti;
 	\item I file \texttt{server.c, worker.c, signal.c} e \texttt{commands.c}, con relativi header, contengono l'implementazione dell'Object Store;
 	\item I file \texttt{libobjstore.c} e \texttt{libobjstore.h} contengono l'implementazione della liberia lato client;
-	\item I file \texttt{testclient.c, badclient.c} e \texttt{simtest.c} contengono dei client testano le varie funzionalità del server. In particolare, \texttt{testclient.c} testa le funzionalità dell'Object Store, mentre i restanti test stressano l'Object Store in vari modi.
+	\item I file \texttt{testclient.c, badclient.c} e \texttt{simtest.c} contengono dei client che testano le varie funzionalità del server. In particolare, \texttt{testclient.c} testa le funzionalità dell'Object Store, mentre i restanti test stressano l'Object Store in vari modi.
 \end{itemize}
 \subsection{Makefile}
 Il \texttt{Makefile} contiene cinque target:
 \begin{itemize}
 	\item Il target \texttt{all} (di default) compila l'object store, la libreria client e il client di test;
-	\item Il target \texttt{test} compila il client di test ed esegue dei test atti a verificare il corretto funzionamento dell'object store. L'esito dei test viene ridiretto nel file \texttt{testout.log};
+	\item Il target \texttt{test} compila il client di test ed esegue dei test atti a verificare il corretto funzionamento dell'object store. L'esito dei test viene ridiretto nel file \texttt{testout.log}. Si presuppone che ci sia già un Object Store in esecuzione;
 	\item Il target \texttt{server} compila solo l'object store;
 	\item Il target \texttt{libobjstore} compila la libreria client in formato statico, salvandola nella cartella \texttt{libs};
 	\item Il target \texttt{clean} rimuove tutti i prodotti del processo di compilazione.
@@ -21,12 +21,18 @@ Il \texttt{Makefile} contiene cinque target:
 Infine, lo script \texttt{testsum.sh} elabora il file prodotto dai test, rendendolo più leggibile. Un esempio di tale processo è:
 \begin{Verbatim}
 Format: Total   Type1   Type2   Type3
-Passed: 100 50 30 20
+Passed: 90 40 30 20
 Failed: 0 0 0 0
-by:
+by:  client1 client4 client6 client5 client21 client32 client12
+client25 client3 client14
 \end{Verbatim}
+
+dove i client nella riga che inizia con \texttt{by:} sono i client che hanno fallito i loro test.
+
+Nella versione dell'Object Store allegata a questo documento, tutti i cento test dovrebbero essere eseguiti correttamente.
 \section{Scelte implementative}
 \subsection{Object Store}
+Si è deciso di aprire il file di socket nel percorso \texttt{/tmp/objstore.sock}, in modo da rendere l'Object Store raggiungibile da qualunque client, indipendentemente dal percorso di lavoro dell'OS\@. \newline
 Come punto centrale del server c'è la seguente struct, definita nel file \texttt{server.h}:
 \begin{Verbatim}
 struct server_info_s {
@@ -70,3 +76,6 @@ L'Object Store gestisce tre segnali, \texttt{SIGINT, SIGTERM} e \texttt{SIGUSR1}
 		L'Object Store imposta il valore del membro \texttt{server.server\_running} a 0, comunicando ai thread attualmente attivi di terminare. L'Object Store attende dunque che tutti i thread terminino, prima di uscire dal main.
 	\item Quando l'Object Store riceve il segnale \texttt{SIGUSR1}, stampa il numero di client connessi, il numero di file salvati all'interno dell'Object Store e il peso totale dei dati salvati. Il programma prosegue dunque l'esecuzione.
 \end{itemize}
+
+\section{Esecuzione dei test}
+Eseguire il comando \texttt{make}. In un'altra shell, eseguire il server (file \texttt{server.o}), e in quella principale eseguire \texttt{make test}

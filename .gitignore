@@ -10,3 +10,4 @@ data
 *.log
 *.a
 cliend_cmdline.o
+*.tar.gz

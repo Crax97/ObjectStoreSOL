@@ -9,19 +9,18 @@ server: src/commons.c src/commands.c src/worker.c src/signal.c
 	$(CC) $(CFLAGS) src/$@.c $? -o $@.o -lpthread
 
 test: testclient
-	-rm testout.log
-	touch testout.log
+	printf '' > testout.log
 	seq 1 50 | xargs -n1 -P50 -I{} ./testclient.o client{} 1 1>>testout.log
 	(seq 1 30 | xargs -n1 -P30 -I{} ./testclient.o client{} 2 1>>testout.log) & 
 	(seq 31 50 | xargs -n1 -P20 -I{} ./testclient.o client{} 3 1>>testout.log) &
-	wait
+	
 
 testclient: libobjstore 
 	$(CC) $(CFLAGS) src/$@.c -Llibs/ -lobjstore -o $@.o
 
 libobjstore: src/commons.c
 	$(CC) $(CFLAGS) -c src/$@.c $< 
-	-mkdir libs
+	mkdir -p libs
 	ar rvs libs/$@.so $@.o commons.o
 	
 clean:

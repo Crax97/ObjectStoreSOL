@@ -29,7 +29,8 @@
 pthread_cond_t server_disconnect = PTHREAD_COND_INITIALIZER;
 
 int main(int argc, char** argv) {
-	unlink (SOCKNAME); // Just in case
+	unlink(SOCKNAME); // Just in case
+
 	struct sockaddr_un sock;	
 	sock.sun_family = AF_UNIX;
 	strcpy(sock.sun_path, SOCKNAME);			
@@ -47,6 +48,8 @@ int main(int argc, char** argv) {
 	server.server_fd = socket_fd;
     
 	pthread_t signal_thread = create_signal_thread(&server);
+
+	printf(OS "Ready\n");
 
 	struct pollfd fd;
 	fd.fd = socket_fd;
@@ -75,6 +78,7 @@ int main(int argc, char** argv) {
 	}
 
 	printf(OS "Bye bye!\n");
+
 	unlink(SOCKNAME);
 	return EXIT_SUCCESS;
 }

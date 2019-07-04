@@ -6,9 +6,11 @@
 \title{Object Store}
 \author{Giovanni Solimeno}
 
+\pagenumbering{gobble}
 \maketitle
-
 \newpage
+\pagenumbering{arabic}
+\setcounter{page}{1}
 \tableofcontents
 \newpage
 \input{doc.latex}
