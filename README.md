@@ -1,12 +1,13 @@
 ### Progetto di Sistemi Operativi e Laboratorio dell'anno 2018/2019
 
 ## Note:
-Realizzato da (https://www.facebook.com/CraxGf)[Giovanni Solimeno]
+Realizzato da [Giovanni Solimeno](https://www.facebook.com/CraxGf).
+
 Per testare tutto scompattare il file in una cartella ed eseguire ```make && make test```
 
 Il progetto, revisionato dal prof. Prencipe, è stato criticato in due modi:
 1) Le read dell'header vengono effettuate byte per byte, quando **il modo corretto sarebbe di leggere l'header a chunk, fino a quando non si incontra un newline in uno dei chunk**;
-2) Il flag server_info_s::server_running dovrebbe essere un atomic_t, dato che è una variabile condivisa da più thread (in realtà, come fatto notare dal prof, problemi non ce ne sono, in quanto c`è un unico scrittore e più lettori il flag).
+2) Il flag ```server_info_s::server_running``` dovrebbe essere un ```atomic_t```, dato che è una variabile condivisa da più thread (in realtà, come fatto notare dal prof, problemi non ce ne sono, in quanto c`è un unico scrittore e più lettori il flag).
 
 ## L'object store
 L'object store **è un eseguibile** il cui scopo è quello di **ricevere dai client delle richieste di memorizzare, recuperare, cancellare blocchi di dati dotati di nome**, detti "*oggetti*". L'object store
