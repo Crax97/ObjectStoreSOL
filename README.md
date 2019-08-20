@@ -1,6 +1,9 @@
 ### Progetto di Sistemi Operativi e Laboratorio dell'anno 2018/2019
 
 ## Note:
+Realizzato da (https://www.facebook.com/CraxGf)[Giovanni Solimeno]
+Per testare tutto scompattare il file in una cartella ed eseguire ```make && make test```
+
 Il progetto, revisionato dal prof. Prencipe, è stato criticato in due modi:
 1) Le read dell'header vengono effettuate byte per byte, quando **il modo corretto sarebbe di leggere l'header a chunk, fino a quando non si incontra un newline in uno dei chunk**;
 2) Il flag server_info_s::server_running dovrebbe essere un atomic_t, dato che è una variabile condivisa da più thread (in realtà, come fatto notare dal prof, problemi non ce ne sono, in quanto c`è un unico scrittore e più lettori il flag).
@@ -18,7 +21,3 @@ L'object store è un server che attende il collegamento di un client su un socke
 Internamente, l'object store **memorizza gli oggetti** che gli vengono affidati (e altri eventuali dati che si rendessero necessari) **nel file system**, all'interno di **file che hanno per nome il nome dell'oggetto**. Questi file sono poi **contenuti in directory che hanno per nome il nome del cliente** a cui l'oggetto appartiene. **Tutte le directory dei clienti sono contenute in una directory `data`** all'interno della working directory del server dell'object store.
 
 Il server **quando riceve un segnale termina** il prima possibile **lasciando l'object store in uno stato consistente**, cioè non vengono mai lasciati nel file system oggetti parziali. Quando riceve il **segnale SIGUSR1, vengono stampate sullo standard output alcune informazioni di stato** del server; tra queste, almeno le seguenti: numero di client connessi, numero di oggetti nello store, size totale dello store.
-
-## Note finali
-Realizzato da (https://www.facebook.com/CraxGf)[Giovanni Solimeno]
-Per testare tutto scompattare il file in una cartella ed eseguire ```make && make test```
