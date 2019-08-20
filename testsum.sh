@@ -28,4 +28,4 @@ echo Failed: "${FAILED[@]}"
 echo by: "${WHOFAILED[@]}"
 
 
-killall -s USR1 server.o
+killall -SIGUSR1 server.o

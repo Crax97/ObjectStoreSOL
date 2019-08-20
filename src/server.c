@@ -26,8 +26,6 @@
 
 #define DEFAULT_MASK 0777
 
-pthread_cond_t server_disconnect = PTHREAD_COND_INITIALIZER;
-
 int main(int argc, char** argv) {
 	unlink(SOCKNAME); // Just in case
 
