@@ -3,7 +3,7 @@
 ## Note:
 Realizzato da [Giovanni Solimeno](https://www.facebook.com/CraxGf).
 
-Per testare tutto scompattare il file in una cartella ed eseguire ```make && make test```
+Per testare tutto scompattare il file in una cartella ed eseguire ```make```, lanciare il server ed eseguire ```make test```
 
 Il progetto, revisionato dal prof. Prencipe, è stato criticato in due modi:
 1) Le read dell'header vengono effettuate byte per byte, quando **il modo corretto sarebbe di leggere l'header a chunk, fino a quando non si incontra un newline in uno dei chunk**;
